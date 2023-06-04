@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>bipsi bitsyfont converter</title>
+  
+  <style>
+    :root {
+      font-family: sans-serif;
+
+      --trans-color-1: rgb(32, 32, 32);
+      --trans-color-2: rgb(48, 48, 48);
+      --trans-gradient: repeating-linear-gradient( -45deg, var(--trans-color-1), var(--trans-color-1) .5em, var(--trans-color-2) .5em, var(--trans-color-2) 1em );
+      
+      --button-color: #ffd800;
+      --frame-color: #367b6b;
+      
+      --black-outline-shadow: 0 0 0 2px black;
+      --white-outline-shadow: 0 0 0 2px white;
+    }
+    
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <form>
+      <label>
+        bitsyfont file
+        <input id="file" type="file" accept=".bitsyfont,.txt">
+      </label>
+    </form>
+  </main>
+  <script>
+    function saveTextFile(text, name) {
+      const blob = new Blob([text], { type: "text/plain" });
+      const element = document.createElement("a");
+      const url = window.URL.createObjectURL(blob);
+      element.href = url;
+      element.download = name;
+      element.click();
+      window.URL.revokeObjectURL(url);
+    }
+
+    /**
+     * @param {string} text
+     */
+    function parseFont(text) {
+      const lines = text.split("\n").filter((line) => !line.startsWith("#"));
+      const chars = [];
+
+      const [, name] = /FONT (.*)/.exec(lines.shift());
+      let [, charWidth, charHeight] = /SIZE (\d+) (\d+)/.exec(lines.shift());
+      charWidth = parseInt(charWidth, 10);
+      charHeight = parseInt(charHeight, 10);
+
+      function skipComment() {
+        if (lines[0].startsWith("#")) lines.shift();
+      }
+
+      while (lines.length > 0) {
+        const line = lines.shift();
+        const [, codepoint] = /CHAR (\d+)/.exec(line);
+        
+        let w = charWidth;
+        let h = charHeight;
+        let spacing = undefined;
+        let offset = undefined;
+        let size = undefined;
+
+        if (lines[0].startsWith("CHAR_SIZE")) {
+          [, w, h] = /CHAR_SIZE (\d+) (\d+)/.exec(lines.shift());
+          w = parseInt(w, 10);
+          h = parseInt(h, 10);
+          size = { x: w, y: h };
+        }
+
+        if (lines[0].startsWith("CHAR_OFFSET")) {
+          const [, x, y] = /CHAR_OFFSET (-?\d+) (-?\d+)/.exec(lines.shift());
+          offset = {
+            x: parseInt(x, 10),
+            y: parseInt(y, 10),
+          };
+        }
+
+        if (lines[0].startsWith("CHAR_SPACING")) {
+          const [, s] = /CHAR_SPACING (-?\d+)/.exec(lines.shift());
+          spacing = parseInt(s, 10);
+        }
+
+        const char = [];
+        for (let i = 0; i < h; ++i) {
+          const row = lines.shift();
+          char.push(row);
+        }
+        chars.push({ codepoint: parseInt(codepoint, 10), char, spacing, offset, size });
+      }
+
+      const sideSize = Math.ceil(Math.sqrt(chars.length));
+      const width = charWidth * sideSize;
+      const height = charHeight * sideSize;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+
+      const context = canvas.getContext("2d");
+      const charData = new ImageData(charWidth, charHeight);
+      const array = new Uint32Array(charData.data.buffer);
+      
+      const X = 0xFFFFFFFF;
+      const O = 0x00000000;
+
+      const runs = [];
+      let run;
+
+      const special = {};
+
+      chars.forEach(({ codepoint, char, spacing, offset, size }, i) => {
+        for (let y = 0; y < charHeight; ++y) {
+          for (let x = 0; x < charWidth; ++x) {
+            array[y * charWidth + x] = char[y][x] == "1" ? X : O;
+          }
+        }
+
+        if (!run) {
+          run = [codepoint, codepoint];
+        } else if (run[1] + 1 == codepoint) {
+          run[1] = codepoint;
+        } else {
+          runs.push(run);
+          run = [codepoint, codepoint];
+        }
+
+        const cx = i % sideSize;
+        const cy = Math.floor(i / sideSize);
+        context.putImageData(charData, cx * charWidth, cy * charHeight);
+
+        if ((spacing ?? offset ?? size) !== undefined) special[codepoint] = { spacing, offset, size };
+      });
+
+      runs.push(run);
+
+      const atlas = canvas.toDataURL("webp");
+      const font = {
+        charWidth, 
+        charHeight,
+        runs: runs.map(([start, end]) => start == end ? [start] : [start, end]),
+        special,
+        atlas,
+      };
+
+      saveTextFile(JSON.stringify(font), `${name}.bipsifont.txt`);
+
+      document.body.append(canvas);
+      canvas.style.background = "black";
+    }
+
+    const fileInput = document.getElementById("file");
+    fileInput.addEventListener("input", () => {
+      const [file, ] = fileInput.files;
+      const reader = new FileReader();
+      reader.addEventListener("load", () => {
+        parseFont(reader.result);
+      });
+      reader.readAsText(file);
+    });
+  </script>
+</body>
+
+</html>

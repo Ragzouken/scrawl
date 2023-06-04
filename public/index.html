@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>crawl tool</title>
+  
+  <!-- <link href="./css/engine.css" rel="stylesheet"> -->
+
+  <!-- <script src="./js/howler.core.min.js"></script>
+  <script src="./js/peggy.min.js"></script>
+  <script src="./js/utility.js"></script>
+  <script src="./js/engine.js"></script> -->
+
+  <style>
+    :root {
+      font-family: sans-serif;
+      line-height: 1.5;
+      user-select: none;
+    }
+
+    * { box-sizing: border-box; }
+
+    fieldset {
+      all: unset;
+    }
+
+    html {
+      overflow: hidden;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+
+      position: absolute;
+      inset: 0;
+
+      overflow: hidden;
+
+      background-color: black;
+      color: white;
+    }
+
+    main {
+      position: absolute;
+      z-index: 0;
+      
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+
+      width: 480px;
+      height: 768px;
+
+      display: grid;
+      grid-template-rows: 1fr min-content;
+    }
+
+    #viewport {
+      grid-area: 1 / 1 / 2 / 2;
+      overflow: hidden;
+    }
+
+    #border {
+      position: relative;
+
+      height: 100%;
+      width: 100%;
+      
+      /* box-sizing: content-box; */
+      /* transform: translate(-50%, 0); */
+
+      border: solid white .5rem;
+      border-left-color: grey;
+      border-bottom-color: grey;
+      border-radius: 1rem;
+
+      grid-area: 1 / 1 / 2 / 2;
+    }
+
+    #display {
+      position: absolute;
+      overflow: hidden;
+      border-radius: 1rem;
+      /* transform: translate(-50%, 0); */
+    }
+
+    #display canvas {
+      position: relative;
+      inset: 0;
+      image-rendering: pixelated;
+    }
+
+    #controls {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+
+      padding: .5em 0;
+      gap: .5em;
+
+      height: 250px;
+    }
+
+    button {
+      border: none;
+      background: darkgrey;
+      font-size: 2rem;
+      border: solid white .25em;
+      border-left-color: grey;
+      border-bottom-color: grey;
+      border-radius: .5em;
+
+      cursor: pointer;
+    }
+
+    button:active, button.active {
+      filter: brightness(50%);
+    }
+
+    #dialogue {
+      position: absolute;
+      
+      padding: .5em .75em;
+      border: solid gray 2px;
+      background: black;
+      color: white;
+
+      width: 100%;
+      top: 55%;
+      height: min-content;
+
+      font-size: 1.5rem;
+      font-family: monospace;
+      line-height: 1.25em;
+
+      border: solid white .5rem;
+      border-left-color: grey;
+      border-bottom-color: grey;
+      border-radius: 1rem;
+
+      box-shadow: 0 .25rem 2rem 2rem black;
+
+      cursor: pointer;
+    }
+
+    #dialogue-content {
+      white-space: pre-wrap;
+    }
+
+    @keyframes flash {
+      from {
+        filter: grayscale() brightness(50%);
+      }
+      to {
+        filter: grayscale() brightness(100%);
+      }
+    }
+
+    #prompt {
+      position: absolute;
+
+      left: 50%;
+      transform: translate(-50%, 0);
+      font-size: 1.5rem;
+
+      padding: 0;
+      margin: 0;
+
+      animation: 1s ease-in-out infinite alternate flash;
+    }
+  </style>
+</head>
+
+<body>
+  <script id="importmap" type="application/json">
+    {
+      "imports": {
+        "start": "./js/start.js",
+        "text": "./js/text.js",
+        "three": "./js/three.module.min.js",
+        "stats": "./js/stats.module.js"
+      }
+    }
+  </script>
+
+  <script>
+    const dataElement = document.getElementById("importmap");
+    const data = JSON.parse(dataElement.textContent);
+    dataElement.remove();
+
+    //data.imports.shit = "./js/test-shit-other.js";
+    const mapElement = document.createElement("script");
+    mapElement.type = "importmap";
+    mapElement.textContent = JSON.stringify(data);
+    document.body.append(mapElement);
+  </script>
+
+  <script type="module">
+    import start from "start";
+    document.addEventListener("DOMContentLoaded", start);
+  </script>
+
+  <div id="display"></div>
+
+  <main>
+    <div id="viewport"></div>
+    <div id="border"></div>
+    <div>
+      <div id="controls">
+      </div>
+      <div id="dialogue" hidden>
+        <div id="dialogue-content"></div>
+        <div id="prompt">🔽</div>
+      </div>
+    </div>
+  </main>
+</body>
+
+</html>
