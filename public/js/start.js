@@ -657,6 +657,8 @@ export default async function start() {
     heldActions.set("MOVE_RIGHT", () => move((DIRECTION+3)%4));
     heldActions.set("MOVE_BACK",  () => move((DIRECTION+2)%4));
     heldActions.set("MOVE_LEFT",  () => move((DIRECTION+1)%4));
+
+    document.querySelector("#loading").close();
 }
 
 /**
