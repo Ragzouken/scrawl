@@ -1,0 +1,41 @@
+name: publish
+
+on: 
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: upload github pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./public
+      - name: deploy to itch
+        uses: yeslayla/butler-publish-itchio-action@v1.0.3
+        env:
+          BUTLER_CREDENTIALS: ${{ secrets.BUTLER_CREDENTIALS }}
+          CHANNEL: web
+          ITCH_GAME: scrawl
+          ITCH_USER: candle
+          PACKAGE: ./public
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: deploy to github pages
+        id: deployment
+        uses: actions/deploy-pages@v4
