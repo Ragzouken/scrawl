@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import Stats from "stats";
 
-import { Atlas, loadBipsiFont, makeListMenu, makeTextBox } from "text";
+import tilesetToTextureArray from "atlas";
 
 /**
  * @param {HTMLElement} element 
@@ -135,7 +135,7 @@ function generate_world() {
         const faceTiles = [];
     
         for (let i = 0; i < 4; ++i) {
-            faceTiles.push(randElement([1, 2, 3]));
+            faceTiles.push(THREE.MathUtils.randInt(1, 3));
         }
     
         faceTiles.push(2);
@@ -223,14 +223,43 @@ export default async function start() {
     const tilesTex = await loader.loadAsync("assets/tiles.webp");
     pixelise(tilesTex);
 
-    const uiTex = await loader.loadAsync("assets/ui.webp");
-    pixelise(uiTex);
-    const uiMat = new THREE.MeshBasicMaterial({ map: uiTex, vertexColors: true, alphaTest: .5 });
+    const texArray = await tilesetToTextureArray(tilesTex.image, 24, 24);
     
-    const imageLoader = new THREE.ImageLoader();
-    const uiAtlas = new Atlas(await imageLoader.loadAsync("assets/ui.webp"));
-    uiAtlas.addSubImage("ui-box", new THREE.Box2(new THREE.Vector2(0, 0), new THREE.Vector2(24, 24)));
-    uiAtlas.addSubImage("select", new THREE.Box2(new THREE.Vector2(24, 0), new THREE.Vector2(32, 8)));
+    const tilesMaterial = new THREE.MeshBasicMaterial({ 
+        map: tilesTex, 
+        vertexColors: true, 
+        alphaTest: .5,
+    });
+
+    tilesMaterial.onBeforeCompile = function(shader) {
+        const vertexExtra = `
+attribute int tile;
+flat varying int tile2;       
+`
+
+        shader.vertexShader = shader.vertexShader.replace("#include <uv_pars_vertex>", "#include <uv_pars_vertex>\n" + vertexExtra);
+        
+        shader.vertexShader = shader.vertexShader.replace(
+            "#include <color_vertex>", 
+            `#include <color_vertex>
+            tile2 = tile;
+        `);
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <uv_pars_fragment>", 
+            `#include <uv_pars_fragment>
+            flat varying int tile2;
+            uniform mediump sampler2DArray tileset;
+        `);
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <map_fragment>", 
+            `vec4 sampledDiffuseColor = texture(tileset, vec3(vMapUv, tile2));
+            diffuseColor *= sampledDiffuseColor;
+        `);
+
+        shader.uniforms.tileset = { value: texArray };
+    }
 
     let NEXT_DIALOGUE_INDEX = 0;
     const DIALOGUES = [
@@ -288,20 +317,6 @@ export default async function start() {
         }
     }
 
-    const fontData = await fetch("assets/ibm437-small.bipsifont.txt").then((r) => r.json());
-    const font = await loadBipsiFont(fontData);
-    font.lineHeight = 12;
-    const dia = "Welcome, to the Cathedral of Shadows! Gather demons and come again!";
-    const items = [
-        { label: "Attack", value: undefined },
-        { label: "Item", value: undefined },
-        { label: "Defend", value: undefined },
-    ];
-    //const { group: text, size } = makeTextBox(font, dia, { width: 6 * 25 + 1, uiAtlas, align: 0 });
-    const { group: text, size } = makeListMenu(font, items, { width: 6 * 9 + 1, uiAtlas, align: 0 });
-    const slack = new THREE.Vector2(256, 256).sub(size);
-    text.position.set(slack.x * .5, slack.y * .5, 0);
-
     const clock = new THREE.Clock();
     const stats = Stats();
     //document.body.appendChild(stats.dom);
@@ -323,8 +338,6 @@ export default async function start() {
 
     const charObjects = new THREE.Object3D();
     scene.add(charObjects);
-
-    const tilesMaterial = new THREE.MeshBasicMaterial({ map: tilesTex, vertexColors: true, alphaTest: .5 });
 
     function makeChar(tile) {
         const charTest = new THREE.Mesh(
@@ -687,7 +700,7 @@ function generateCharGeometry(tile) {
     const positions = [];
     const uvs = [];
     const colors = [];
-    const normals = [];
+    const tiles = [];
     const indexes = [];
 
     const vec3 = new THREE.Vector3();
@@ -698,8 +711,8 @@ function generateCharGeometry(tile) {
     indexes.push(b+1, b+2, b+3);
     
     const coords = getTileCoords(tile);
-    const xrange = [coords.min.x, coords.max.x];
-    const yrange = [coords.min.y, coords.max.y];
+    const xrange = [0, 1]//[coords.min.x, coords.max.x];
+    const yrange = [0, 1]//[coords.min.y, coords.max.y];
 
     const color = new THREE.Color();
 
@@ -712,13 +725,15 @@ function generateCharGeometry(tile) {
             vec2.toArray(uvs, uvs.length);
 
             color.toArray(colors, colors.length);
-            vec3.toArray(normals, normals.length);
+
+            tiles.push(tile);
         }
     }
 
     geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
     geometry.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(uvs), 2));
     geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
+    geometry.setAttribute("tile", new THREE.BufferAttribute(new Int32Array(tiles), 1));
     geometry.setIndex(indexes);
 
     return geometry;
@@ -730,6 +745,7 @@ function generateCellGeometry(faceTiles, colors2) {
     const positions = [];
     const colors = [];
     const uvs = [];
+    const tiles = [];
     const normals = [];
     const indexes = [];
 
@@ -750,6 +766,7 @@ function generateCellGeometry(faceTiles, colors2) {
     geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
     geometry.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(uvs), 2));
     geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
+    geometry.setAttribute("tile", new THREE.BufferAttribute(new Int32Array(tiles), 1));
     //geometry.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(normals), 3));
     geometry.setIndex(indexes);
 
@@ -773,8 +790,8 @@ function generateCellGeometry(faceTiles, colors2) {
         indexes.push(b+1, b+2, b+3);
         
         const coords = getTileCoords(tile);
-        const xrange = [coords.min.x, coords.max.x];
-        const yrange = [coords.min.y, coords.max.y];
+        const xrange = [0, 1]// [coords.min.x, coords.max.x];
+        const yrange = [0, 1]//[coords.min.y, coords.max.y];
 
         for (let y = 0; y < 2; ++y) {
             for (let x = 0; x < 2; ++x) {
@@ -789,6 +806,7 @@ function generateCellGeometry(faceTiles, colors2) {
                 vec3.toArray(normals, normals.length);
 
                 color.toArray(colors, colors.length);
+                tiles.push(tile);
             }
         }
     }
