@@ -31,10 +31,18 @@ function pixelise(texture) {
 }
 
 const HELD_KEYS = new Set();
+const DOWN_KEYS = new Set();
+
 const heldActions = new Map();
 const downActions = new Map();
-/** @type {Map<HTMLButtonElement, string>} */
+/** @type {Map<HTMLButtonElement, Set<string>>} */
 const buttonActions = new Map();
+
+function linkButtonAction(button, name) {
+    const set = buttonActions.get(button) ?? new Set();
+    set.add(name);
+    buttonActions.set(button, set);
+}
 
 const keyToCode = new Map();
 keyToCode.set("ArrowUp", "KeyW");
@@ -47,6 +55,9 @@ const keyToButton = new Map();
 function down(key, code) {
     HELD_KEYS.add(key);
     HELD_KEYS.add(code);
+
+    DOWN_KEYS.add(key);
+    DOWN_KEYS.add(code);
 }
 
 function up(key, code) {
@@ -501,17 +512,17 @@ flat varying int tile2;
     bindButtonToKey(mleft, "MOVE_LEFT");
     bindButtonToKey(mback, "MOVE_BACK");
 
-    buttonActions.set(tleft, "ArrowLeft");
-    buttonActions.set(mahead, "ArrowUp");
-    buttonActions.set(tright, "ArrowRight");
-    buttonActions.set(mback, "ArrowDown");
+    linkButtonAction(tleft, "ArrowLeft");
+    linkButtonAction(mahead, "ArrowUp");
+    linkButtonAction(tright, "ArrowRight");
+    linkButtonAction(mback, "ArrowDown");
 
-    buttonActions.set(tleft, "q");
-    buttonActions.set(mahead, "w");
-    buttonActions.set(tright, "e");
-    buttonActions.set(mback, "s");
-    buttonActions.set(mleft, "a");
-    buttonActions.set(mright, "d");
+    linkButtonAction(tleft, "q");
+    linkButtonAction(mahead, "w");
+    linkButtonAction(tright, "e");
+    linkButtonAction(mback, "s");
+    linkButtonAction(mleft, "a");
+    linkButtonAction(mright, "d");
 
     /** @type {HTMLElement} */
     const display = document.querySelector("#display");
@@ -568,15 +579,23 @@ flat varying int tile2;
     }
 
     function animate(dt) {
+        for (const [key, func] of heldActions) {
+            if (HELD_KEYS.has(key) || DOWN_KEYS.has(key)) {
+                func();
+            }
+        }
+
         for (const key of HELD_KEYS) {
             const func = heldActions.get(key);
             if (func) func();
         }
 
-        for (const [button, action] of buttonActions) {
-            const held = HELD_KEYS.has(action);
+        for (const [button, actions] of buttonActions) {
+            const held = Array.from(actions.values()).map((name) => HELD_KEYS.has(name)).reduce((p, n) => p || n);
             button.classList.toggle("active", held);
         }
+
+        DOWN_KEYS.clear();
 
         CURRENT_MOVE.u += dt * 3;
         CURRENT_MOVE.u = Math.min(1, CURRENT_MOVE.u);

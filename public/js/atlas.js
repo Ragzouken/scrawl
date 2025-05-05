@@ -15,6 +15,8 @@ export default async function tilesetToTextureArray(image, width, height) {
     context.scale(1, -1);
     context.drawImage(image, 0, -image.height);
 
+    console.log(count)
+
     for (let y = 0; y < ycount; ++y) {
         for (let x = 0; x < xcount; ++x) {
             const imagedata = context.getImageData(x * width, y * height, width, height);
@@ -34,8 +36,6 @@ export default async function tilesetToTextureArray(image, width, height) {
     array.unpackAlignment = 4; //more efficient for RGBAFormat
     array.generateMipmaps = false;
     array.needsUpdate = true;
-
-    console.log(xcount, ycount, count);
 
     return array;
 }
