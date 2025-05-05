@@ -11,7 +11,7 @@ export default async function tilesetToTextureArray(image, width, height) {
     const data = new Uint8Array(count * size);
       
     const canvas = new OffscreenCanvas(image.width, image.height);
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext('2d', { willReadFrequently: true });
     context.scale(1, -1);
     context.drawImage(image, 0, -image.height);
 
