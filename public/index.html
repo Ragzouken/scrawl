@@ -145,7 +145,23 @@
       border-bottom-color: grey;
       border-radius: 1rem;
 
-      box-shadow: 0 .25rem 2rem 2rem black;
+      /* box-shadow: 0 .25rem 2rem 2rem black; */
+
+      cursor: pointer;
+    }
+
+    #dialogue-blocker {
+      position: absolute;
+      background: linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0) 0%, 
+        rgba(0, 0, 0, 1) 2rem);
+
+      width: 100%;
+      top: calc(55% - 2rem);
+      bottom: 0;
+
+      opacity: 0.75;
 
       cursor: pointer;
     }
@@ -163,7 +179,7 @@
       }
     }
 
-    #prompt {
+    #dialogue-prompt {
       position: absolute;
 
       left: 50%;
@@ -230,9 +246,10 @@
     <div>
       <div id="controls">
       </div>
+      <div id="dialogue-blocker" hidden></div>
       <div id="dialogue" hidden>
         <div id="dialogue-content"></div>
-        <div id="prompt">🔽</div>
+        <div id="dialogue-prompt">🔽</div>
       </div>
     </div>
   </main>

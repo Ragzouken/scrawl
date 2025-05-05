@@ -280,11 +280,17 @@ flat varying int tile2;
 
     /** @type {HTMLElement} */
     const dialogueElement = document.querySelector("#dialogue");
+    const dialogueBlockerElement = document.querySelector("#dialogue-blocker");
     const dialogueContentElement = document.querySelector("#dialogue-content");
+    const dialoguePromptElement = document.querySelector("#dialogue-prompt");
 
     dialogueElement.addEventListener("click", () => NEXT_DIALOGUE());
+    dialogueBlockerElement.addEventListener("click", () => NEXT_DIALOGUE());
 
     function INTERACT() {
+        if (IS_IN_DIALOGUE())
+            return NEXT_DIALOGUE();
+
         if (!CAN_MOVE())
             return;
 
@@ -311,15 +317,19 @@ flat varying int tile2;
     function SHOW_DIALOGUE(text) {
         dialogueElement.hidden = false;
         dialogueContentElement.textContent = text;
+        dialogueBlockerElement.hidden = false;
     }
 
     function HIDE_DIALOGUE() {
         dialogueElement.hidden = true;
+        dialogueBlockerElement.hidden = true;
     }
 
     function NEXT_DIALOGUE() {
         const text = DIALOGUES[NEXT_DIALOGUE_INDEX];
         NEXT_DIALOGUE_INDEX += 1;
+
+        dialoguePromptElement.textContent = NEXT_DIALOGUE_INDEX < DIALOGUES.length ? "🔽" : "⏹️";
 
         if (text) {
             SHOW_DIALOGUE(text);
@@ -595,6 +605,9 @@ flat varying int tile2;
             button.classList.toggle("active", held);
         }
 
+        if (DOWN_KEYS.has(" "))
+            INTERACT();
+
         DOWN_KEYS.clear();
 
         CURRENT_MOVE.u += dt * 3;
@@ -681,7 +694,6 @@ flat varying int tile2;
     heldActions.set("d", () => move((DIRECTION+3)%4));
     heldActions.set("s", () => move((DIRECTION+2)%4));
     heldActions.set("a", () => move((DIRECTION+1)%4));
-    heldActions.set(" ", INTERACT);
 
     heldActions.set("TURN_LEFT",  () => rotate( 1));
     heldActions.set("TURN_RIGHT", () => rotate(-1));
