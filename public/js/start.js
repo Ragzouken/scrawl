@@ -591,7 +591,7 @@ flat varying int tile2;
         }
 
         for (const [button, actions] of buttonActions) {
-            const held = Array.from(actions.values()).map((name) => HELD_KEYS.has(name)).reduce((p, n) => p || n);
+            const held = Array.from(actions.values()).map((name) => HELD_KEYS.has(name) || DOWN_KEYS.has(name)).reduce((p, n) => p || n);
             button.classList.toggle("active", held);
         }
 
