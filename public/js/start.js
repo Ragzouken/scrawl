@@ -129,9 +129,9 @@ const FACE_NORMALS = DIRECTIONS;
 FACE_NORMALS.push(new THREE.Vector3(0, -1, 0));
 FACE_NORMALS.push(new THREE.Vector3(0,  1, 0));
 
-function coords(x, z) {
-    return `${x|0},${z|0}`;
-} 
+function coords(...coords) {
+    return coords.map((coord) => coord|0).join(",");
+}
 
 function generate_world() {
     /** @type {Map<string, SMTCell>} */
@@ -272,6 +272,10 @@ flat varying int tile2;
         shader.uniforms.tileset = { value: texArray };
     }
 
+    const charsMaterial = tilesMaterial.clone();
+    // charsMaterial.side = THREE.DoubleSide;
+    charsMaterial.onBeforeCompile = tilesMaterial.onBeforeCompile;
+
     let NEXT_DIALOGUE_INDEX = 0;
     const DIALOGUES = [
         `Welcome to the Cathedral of Shadows! Gather demons and come again!`,
@@ -284,30 +288,23 @@ flat varying int tile2;
     const dialogueContentElement = document.querySelector("#dialogue-content");
     const dialoguePromptElement = document.querySelector("#dialogue-prompt");
 
-    dialogueElement.addEventListener("click", () => NEXT_DIALOGUE());
-    dialogueBlockerElement.addEventListener("click", () => NEXT_DIALOGUE());
+    dialogueElement.addEventListener("pointerdown", () => NEXT_DIALOGUE());
+    dialogueBlockerElement.addEventListener("pointerdown", () => NEXT_DIALOGUE());
+
+    let MOVE_QUEUED = false;
 
     function INTERACT() {
         if (IS_IN_DIALOGUE())
             return NEXT_DIALOGUE();
+    }
 
-        if (!CAN_MOVE())
+    function INTERACT_CHAR(char) {
+        if (!CAN_MOVE() || IS_IN_DIALOGUE())
             return;
 
-        const position = new THREE.Vector3();
-        
-        for (const obj of charObjects.children) {
-            position.subVectors(camFixture.position, obj.position);
-            const d = position.manhattanLength();
-
-            if (d < .5) {
-                NEXT_DIALOGUE_INDEX = 0;
-                NEXT_DIALOGUE();
-                return;
-            }
-        }
-
-        toggle_camera();
+        // char
+        NEXT_DIALOGUE_INDEX = 0;
+        NEXT_DIALOGUE();
     }
 
     function IS_IN_DIALOGUE() {
@@ -364,7 +361,7 @@ flat varying int tile2;
         const charTest = new THREE.Mesh(
             //new THREE.BoxGeometry(1, 1, 1),
             generateCharGeometry(tile),
-            tilesMaterial,
+            charsMaterial,
         );
         charTest.position.set(0, 0, 0);
         charTest.scale.set(.8, .8, .8);
@@ -400,13 +397,26 @@ flat varying int tile2;
         }
     }
 
+    const CHARMAP = new Map();
+
     const elements = Array.from(cells.values());
     for (let i = 0; i < 8; ++i) {
         const cell = elements.splice(THREE.MathUtils.randInt(0, elements.length-1), 1)[0];
-        const char = makeChar(4);
-        char.position.set(cell.position[0], 0, cell.position[1]);
+        // const cell = elements[THREE.MathUtils.randInt(0, elements.length-1)];
+    
+        for (let d = 0; d < 4; ++d) {
+            if (cell.faceTiles[d] == 0)
+                continue;
 
-        do_distances(char.position, 0);
+            const char = makeChar(4);
+            char.lookAt(DIRECTIONS[d]);
+            char.position.set(cell.position[0], 0, cell.position[1]);
+            char.position.addScaledVector(DIRECTIONS[d], .4);
+
+            CHARMAP.set(coords(cell.position[0], cell.position[1], d), char);
+        }
+
+        do_distances(new THREE.Vector3(cell.position[0], 0, cell.position[1]), 0);
     }
 
     const dlimit = 6;
@@ -501,6 +511,7 @@ flat varying int tile2;
         const button = document.createElement("button");
         button.textContent = label;
         button.addEventListener("click", callback);
+        button.classList.add("ui-border");
         controls.appendChild(button);
         return button;
     }
@@ -509,11 +520,25 @@ flat varying int tile2;
     const mahead = add_button("⬆️");
     const tright = add_button("↩️");
     const mleft = add_button("⬅️");
-    add_button("💬", INTERACT);
+    add_button("👁️", toggle_camera);
     const mright = add_button("➡️");
     add_button("👁️", toggle_camera).style.visibility = "hidden";
     const mback = add_button("⬇️");
     add_button("").style.visibility = "hidden";
+
+    const DIR_BUTTONS = [
+        mahead,
+        mleft,
+        mback,
+        mright,
+    ];
+
+    const DIR_EMOJIS = [
+        "⬆️",
+        "⬅️",
+        "⬇️",
+        "➡️",
+    ]
 
     bindButtonToKey(tleft, "TURN_LEFT");
     bindButtonToKey(mahead, "MOVE_AHEAD");
@@ -569,6 +594,8 @@ flat varying int tile2;
         camera2.updateProjectionMatrix(); 
     }
 
+    let DIRECTION = 0;
+
     const target = new THREE.WebGLRenderTarget(128, 128);
     pixelise(target.texture)
 
@@ -605,10 +632,30 @@ flat varying int tile2;
             button.classList.toggle("active", held);
         }
 
+        for (const [d, button] of DIR_BUTTONS.entries()) {
+            const dir = (d + DIRECTION) % 4;
+            const [x, z] = [CURRENT_MOVE.b.x|0, CURRENT_MOVE.b.z|0];
+            
+            const char = get_char(x, z, dir);
+            const pass = is_passable(x, z, dir);
+
+            if (char)
+                button.textContent = "💬";
+            else if (pass)
+                button.textContent = DIR_EMOJIS[d];
+            else
+                button.textContent = "❌";
+        }
+
         if (DOWN_KEYS.has(" "))
             INTERACT();
 
         DOWN_KEYS.clear();
+
+        if (MOVE_QUEUED && CAN_MOVE()) {
+            MOVE_QUEUED = false;
+            move(DIRECTION);
+        }
 
         CURRENT_MOVE.u += dt * 3;
         CURRENT_MOVE.u = Math.min(1, CURRENT_MOVE.u);
@@ -626,10 +673,10 @@ flat varying int tile2;
         camFixture.updateMatrixWorld();
         camera.updateMatrixWorld();
 
-        for (const char of charObjects.children) {
-            char.rotation.copy(camFixture.rotation);
-            char.updateMatrixWorld();
-        }
+        // for (const char of charObjects.children) {
+        //     char.rotation.copy(camFixture.rotation);
+        //     char.updateMatrixWorld();
+        // }
 
         renderer.render(scene, camera);
     }
@@ -656,11 +703,14 @@ flat varying int tile2;
         CURRENT_MOVE.b.copy(camFixture.position).round();
     }
 
-    let DIRECTION = 0;
-
     function is_passable(x, z, direction) {
         const cell = cells.get(coords(x, z));
         return cell == undefined || cell.faceTiles[direction] == 0;
+    }
+
+    function get_char(x, z, direction) {
+        const char = CHARMAP.get(coords(x, z, direction));
+        return char;
     }
 
     function move(direction) {
@@ -671,16 +721,31 @@ flat varying int tile2;
         const x = camFixture.position.x;
         const z = camFixture.position.z;
 
-        if (!is_passable(x, z, direction))
+        if (!is_passable(x, z, direction) && direction !== DIRECTION) {
+            if ((DIRECTION + 1) % 4 == direction)
+                rotate(1)
+            else if ((DIRECTION + 4 - 1) % 4 == direction)
+                rotate(-1)
+            else
+                rotate(2)
+
+            MOVE_QUEUED = true;
+
             return;
+        }
 
-        CURRENT_MOVE.u = 0;
+        const char = get_char(x, z, direction);
+        if (char) {
+            INTERACT_CHAR(char);
+        } else if (is_passable(x, z, direction)) {
+            CURRENT_MOVE.u = 0;
 
-        CURRENT_MOVE.a.set(x, 0, z).round();
-        CURRENT_MOVE.b.addVectors(CURRENT_MOVE.a, DIRECTIONS[direction]).round();
+            CURRENT_MOVE.a.set(x, 0, z).round();
+            CURRENT_MOVE.b.addVectors(CURRENT_MOVE.a, DIRECTIONS[direction]).round();
 
-        CURRENT_MOVE.ar.copy(ROTATIONS[DIRECTION]);
-        CURRENT_MOVE.br.copy(ROTATIONS[DIRECTION]);
+            CURRENT_MOVE.ar.copy(ROTATIONS[DIRECTION]);
+            CURRENT_MOVE.br.copy(ROTATIONS[DIRECTION]);
+        }
     }
 
     heldActions.set("ArrowLeft",  () => rotate( 1));

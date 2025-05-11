@@ -76,12 +76,8 @@
       /* box-sizing: content-box; */
       /* transform: translate(-50%, 0); */
 
-      border: solid white .5rem;
-      border-left-color: grey;
-      border-bottom-color: grey;
-      border-radius: 1rem;
-
       grid-area: 1 / 1 / 2 / 2;
+      background: transparent;
     }
 
     #display {
@@ -109,13 +105,9 @@
     }
 
     button {
-      border: none;
+      font-family: inherit;
       background: darkgrey;
       font-size: 2rem;
-      border: solid white .25em;
-      border-left-color: grey;
-      border-bottom-color: grey;
-      border-radius: .5em;
 
       cursor: pointer;
     }
@@ -124,30 +116,35 @@
       filter: brightness(50%);
     }
 
-    #dialogue {
-      position: absolute;
-      
-      padding: .5em .75em;
-      border: solid gray 2px;
-      background: black;
-      color: white;
+    .ui-border {
+      border: solid white .5rem;
+      border-left-color: grey;
+      border-bottom-color: grey;
+      border-radius: 1rem;
+    }
 
-      width: 100%;
-      top: 55%;
-      height: min-content;
+    .ui-dialogue {
+      padding: .5em .75em;
 
       font-size: 1.5rem;
       font-family: monospace;
       line-height: 1.25em;
 
-      border: solid white .5rem;
-      border-left-color: grey;
-      border-bottom-color: grey;
-      border-radius: 1rem;
+      /* background: black;
+      color: white; */
+    }
 
-      /* box-shadow: 0 .25rem 2rem 2rem black; */
+    #dialogue {
+      position: absolute;
+      
+      width: 100%;
+      top: 55%;
+      height: min-content;
 
       cursor: pointer;
+
+      background: black;
+      color: white;
     }
 
     #dialogue-blocker {
@@ -190,6 +187,29 @@
       margin: 0;
 
       animation: 1s ease-in-out infinite alternate flash;
+    }
+
+    #dialogue-choices {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+
+      padding: .5em 0;
+      gap: .5em;
+
+      position: absolute;
+
+      width: 100%;
+      top: 505px;
+      height: min-content;
+    }
+
+    #dialogue-choices button {
+      /* background: black; */
+      /* color: white; */
+      font-size: 1.25rem;
+
+
     }
 
     #loading {
@@ -242,15 +262,20 @@
 
   <main>
     <div id="viewport"></div>
-    <div id="border"></div>
+    <div id="border" class="ui-border"></div>
     <div>
       <div id="controls">
       </div>
       <div id="dialogue-blocker" hidden></div>
-      <div id="dialogue" hidden>
+      <div id="dialogue" class="ui-border ui-dialogue" hidden>
         <div id="dialogue-content"></div>
         <div id="dialogue-prompt">🔽</div>
       </div>
+      <!-- <div id="dialogue-choices">
+        <button class="ui-border ui-dialogue">Fuck you.</button>
+        <button class="ui-border ui-dialogue">Join me.</button>
+        <button class="ui-border ui-dialogue">Give me life stones.</button>
+      </div> -->
     </div>
   </main>
 
