@@ -27,6 +27,7 @@ export default async function tilesetToTextureArray(image, width, height) {
 
     const array = new THREE.DataArrayTexture(data, width, height, count);
     array.image.data = data;
+    array.colorSpace = THREE.SRGBColorSpace;
     array.format = THREE.RGBAFormat;
     array.type = THREE.UnsignedByteType;
     array.minFilter = THREE.NearestFilter;

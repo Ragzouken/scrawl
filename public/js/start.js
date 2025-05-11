@@ -144,13 +144,20 @@ function generate_world() {
             return grid.get(co);
 
         const faceTiles = [];
-    
+
+        const tile = THREE.MathUtils.randInt(3, 64);
+
         for (let i = 0; i < 4; ++i) {
-            faceTiles.push(THREE.MathUtils.randInt(1, 3));
+            const tile = THREE.MathUtils.randInt(1, 3);
+            // faceTiles.push(tile);
+            faceTiles.push(THREE.MathUtils.randInt(3, 64));
         }
     
-        faceTiles.push(2);
-        faceTiles.push(1);
+        faceTiles.push(THREE.MathUtils.randInt(3, 64));
+        faceTiles.push(THREE.MathUtils.randInt(3, 64));
+
+        // faceTiles.push(2);
+        // faceTiles.push(1);
 
         const cell = {
             position: [x, z],
@@ -180,8 +187,8 @@ function generate_world() {
             if (i > 0)
                 cell.faceTiles[(di+2) % 4] = 0;
             
-            cell.color.setHSL(hue, .75, .5);
-            // cell.color.setHSL(0, 0, .5);
+            // cell.color.setHSL(hue, .75, .5);
+            cell.color.setHSL(0, 0, .5);
 
             if (Math.random() < .5) {
                 di = (di + randElement([1, 3])) % 4;
@@ -232,8 +239,6 @@ export default async function start() {
 
     const loader = new THREE.TextureLoader();
     const tilesTex = await loader.loadAsync("assets/tiles.webp");
-    pixelise(tilesTex);
-
     const texArray = await tilesetToTextureArray(tilesTex.image, 24, 24);
     
     const tilesMaterial = new THREE.MeshBasicMaterial({ 
@@ -403,10 +408,14 @@ flat varying int tile2;
     for (let i = 0; i < 8; ++i) {
         const cell = elements.splice(THREE.MathUtils.randInt(0, elements.length-1), 1)[0];
         // const cell = elements[THREE.MathUtils.randInt(0, elements.length-1)];
-    
+
+        let success = false;
+
         for (let d = 0; d < 4; ++d) {
-            if (cell.faceTiles[d] == 0)
+            if (cell.faceTiles[d] == 0 || Math.random() < .5)
                 continue;
+
+            success = true;
 
             const char = makeChar(4);
             char.lookAt(DIRECTIONS[d]);
@@ -416,18 +425,20 @@ flat varying int tile2;
             CHARMAP.set(coords(cell.position[0], cell.position[1], d), char);
         }
 
-        do_distances(new THREE.Vector3(cell.position[0], 0, cell.position[1]), 0);
+        if (success)
+            do_distances(new THREE.Vector3(cell.position[0], 0, cell.position[1]), 0);
     }
 
-    const dlimit = 6;
+    const dlimit = 7;
     for (const cell of cells.values()) {
         const d = distances.get(cell);
-        const u = Math.min(d, dlimit) / dlimit;
+        const u = Math.min(d, dlimit) / (dlimit+1);
         const hsl = cell.color.getHSL({h:0,s:0,l:0});
-        hsl.l = Math.max(.5-u*.5, 0.05);
-        hsl.s = 1 - (u*u);
-        cell.color.setHSL(hsl.h, hsl.s*.75, hsl.l);
+        hsl.l = Math.max((1-u)*.5, 0.025);
+        // hsl.s = 1 - (u*u);
+        // cell.color.setHSL(hsl.h, hsl.s*.85, hsl.l);
         //cell.color.setHSL((d/16)%1, .75, Math.max(.5-u*.5, 0.05));
+        cell.color.setRGB(1, 1, 1).multiplyScalar(Math.max((1-u)*(1-u), 0.01));
     }
 
     function regenerate() {
@@ -647,7 +658,7 @@ flat varying int tile2;
                 button.textContent = "❌";
         }
 
-        if (DOWN_KEYS.has(" "))
+        if (DOWN_KEYS.has(" ") || DOWN_KEYS.has("Enter"))
             INTERACT();
 
         DOWN_KEYS.clear();
