@@ -24,6 +24,7 @@
     :root {
       font-family: monospace;
       line-height: 1.5;
+      overscroll-behavior: none;
     }
 
     fieldset {
@@ -60,11 +61,13 @@
 
       display: grid;
       grid-template-rows: 1fr min-content;
+      pointer-events: none;
     }
 
     #viewport {
       grid-area: 1 / 1 / 2 / 2;
       overflow: hidden;
+      pointer-events: none;
     }
 
     #border {
@@ -78,6 +81,7 @@
 
       grid-area: 1 / 1 / 2 / 2;
       background: transparent;
+      pointer-events: none;
     }
 
     #display {
@@ -102,6 +106,7 @@
       gap: .5em;
 
       height: 250px;
+      pointer-events: all;
     }
 
     button {

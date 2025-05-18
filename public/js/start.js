@@ -24,6 +24,55 @@ function scaleElementToParent(element, integer = true) {
     return scale;
 }
 
+class PointerDrag extends EventTarget {
+    /** 
+     * @param {MouseEvent} event
+     */
+    constructor(event, { clickMovementLimit = 5 } = {}) {
+        super();
+        this.pointerId = event["pointerId"];
+        this.clickMovementLimit = 5;
+        this.totalMovement = 0;
+
+        this.downEvent = event;
+        this.lastEvent = event;
+
+        this.listeners = {
+            "pointerup": (event) => {
+                if (event.pointerId !== this.pointerId) return;
+
+                this.lastEvent = event;
+                this.unlisten();
+                this.dispatchEvent(new CustomEvent("up", { detail: event }));
+                if (this.totalMovement <= clickMovementLimit) {
+                    this.dispatchEvent(new CustomEvent("click", { detail: event }));
+                }
+            },
+
+            "pointermove": (event) => {
+                if (event.pointerId !== this.pointerId) return;
+
+                this.lastEvent = event;
+                this.totalMovement += Math.abs(event.movementX);
+                this.totalMovement += Math.abs(event.movementY);
+                this.dispatchEvent(new CustomEvent("move", { detail: event }));
+            }
+        }
+
+        document.addEventListener("pointerup", this.listeners.pointerup);
+        document.addEventListener("pointermove", this.listeners.pointermove);
+    }
+
+    unlisten() {
+        document.removeEventListener("pointerup", this.listeners.pointerup);
+        document.removeEventListener("pointermove", this.listeners.pointermove);
+    }
+}
+
+function easeInOutSine(x){
+    return -(Math.cos(Math.PI * x) - 1) / 2;
+}
+
 function pixelise(texture) {
     texture.generateMipmaps = false;
     texture.minFilter = THREE.NearestFilter;
@@ -125,7 +174,7 @@ for (let i = 0; i < 4; ++i) {
     DIRECTIONS.push(direction);
 }
 
-const FACE_NORMALS = DIRECTIONS;
+const FACE_NORMALS = [...DIRECTIONS];
 FACE_NORMALS.push(new THREE.Vector3(0, -1, 0));
 FACE_NORMALS.push(new THREE.Vector3(0,  1, 0));
 
@@ -513,10 +562,42 @@ flat varying int tile2;
         }
     }
     //window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerdown", onPointerMove);
+    //window.addEventListener("pointerdown", onPointerMove);
 
     document.querySelector("#display").appendChild(renderer.domElement);
     const controls = document.querySelector("#controls");
+
+    renderer.domElement.addEventListener("pointerdown", (event) => {
+        const drag = new PointerDrag(event);
+        const delta = new THREE.Vector3();
+        drag.addEventListener("move", (event) => {
+            delta.x += event.detail.movementX;
+            delta.z -= event.detail.movementY;
+        });
+
+        drag.addEventListener("up", (event) => {
+            //if (delta.length() < 5) return;
+            delta.normalize();
+
+            for (const [dir, vector] of DIRECTIONS.entries()) {
+                const d = delta.dot(vector);
+
+                if (d > 0.85) {
+                    if (dir == 0 || dir == 2) {
+                        move((DIRECTION + dir) % 4);
+                    } else if (dir == 1) {
+                        rotate(-1);
+                    } else if (dir == 3) {
+                        rotate(1);
+                    }
+
+                    return;
+                }
+            }
+
+            SHOW_DIALOGUE(`${delta.x}, ${delta.y}`);
+        });
+    });
 
     function add_button(label, callback=()=>{}) {
         const button = document.createElement("button");
@@ -607,9 +688,6 @@ flat varying int tile2;
 
     let DIRECTION = 0;
 
-    const target = new THREE.WebGLRenderTarget(128, 128);
-    pixelise(target.texture)
-
     const delta = new THREE.Vector3();
     const quata = new THREE.Quaternion();
 
@@ -621,10 +699,6 @@ flat varying int tile2;
         requestAnimationFrame(update);
     }
     update();
-
-    function easeInOutSine(x){
-        return -(Math.cos(Math.PI * x) - 1) / 2;
-    }
 
     function animate(dt) {
         for (const [key, func] of heldActions) {
@@ -683,11 +757,6 @@ flat varying int tile2;
 
         camFixture.updateMatrixWorld();
         camera.updateMatrixWorld();
-
-        // for (const char of charObjects.children) {
-        //     char.rotation.copy(camFixture.rotation);
-        //     char.updateMatrixWorld();
-        // }
 
         renderer.render(scene, camera);
     }
@@ -789,18 +858,6 @@ function randElement(list) {
     return list[THREE.MathUtils.randInt(0, list.length-1)];
 }
 
-function getTileCoords(tile) {
-    const [xcount, ycount] = [35, 41];
-    const [x, y] = [tile % xcount, Math.floor(tile / xcount)];
-
-    const shift = 0;//.5 / 24 * .75;
-
-    return {
-        min: new THREE.Vector2((x+0+shift) / xcount, (y+0+shift) / ycount),
-        max: new THREE.Vector2((x+1-shift) / xcount, (y+1-shift) / ycount),
-    };
-}
-
 function generateCharGeometry(tile) {
     const geometry = new THREE.BufferGeometry();
 
@@ -817,9 +874,8 @@ function generateCharGeometry(tile) {
     indexes.push(b+2, b+1, b+0);
     indexes.push(b+1, b+2, b+3);
     
-    const coords = getTileCoords(tile);
-    const xrange = [0, 1]//[coords.min.x, coords.max.x];
-    const yrange = [0, 1]//[coords.min.y, coords.max.y];
+    const xrange = [0, 1];
+    const yrange = [0, 1];
 
     const color = new THREE.Color();
 
@@ -878,6 +934,7 @@ function generateCellGeometry(faceTiles, colors2) {
     geometry.setIndex(indexes);
 
     geometry.scale(1, .75, 1);
+    // geometry.scale(.75, .75, .75)
     // geometry.scale(1, 1, 1);
 
     return geometry;
@@ -896,9 +953,8 @@ function generateCellGeometry(faceTiles, colors2) {
         indexes.push(b+2, b+1, b+0);
         indexes.push(b+1, b+2, b+3);
         
-        const coords = getTileCoords(tile);
-        const xrange = [0, 1]// [coords.min.x, coords.max.x];
-        const yrange = [0, 1]//[coords.min.y, coords.max.y];
+        const xrange = [0, 1];
+        const yrange = [0, 1];
 
         for (let y = 0; y < 2; ++y) {
             for (let x = 0; x < 2; ++x) {
