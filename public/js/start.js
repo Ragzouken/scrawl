@@ -73,12 +73,6 @@ function easeInOutSine(x){
     return -(Math.cos(Math.PI * x) - 1) / 2;
 }
 
-function pixelise(texture) {
-    texture.generateMipmaps = false;
-    texture.minFilter = THREE.NearestFilter;
-    texture.magFilter = THREE.NearestFilter;
-}
-
 const HELD_KEYS = new Set();
 const DOWN_KEYS = new Set();
 
@@ -572,11 +566,10 @@ flat varying int tile2;
         const delta = new THREE.Vector3();
         drag.addEventListener("move", (event) => {
             delta.x += event.detail.movementX;
-            delta.z -= event.detail.movementY;
+            delta.z += event.detail.movementY;
         });
 
         drag.addEventListener("up", (event) => {
-            //if (delta.length() < 5) return;
             delta.normalize();
 
             for (const [dir, vector] of DIRECTIONS.entries()) {
@@ -594,8 +587,6 @@ flat varying int tile2;
                     return;
                 }
             }
-
-            SHOW_DIALOGUE(`${delta.x}, ${delta.y}`);
         });
     });
 
