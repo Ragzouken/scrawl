@@ -191,9 +191,7 @@ function generate_world() {
         const tile = THREE.MathUtils.randInt(3, 64);
 
         for (let i = 0; i < 4; ++i) {
-            const tile = THREE.MathUtils.randInt(1, 3);
-            // faceTiles.push(tile);
-            faceTiles.push(THREE.MathUtils.randInt(3, 64));
+            faceTiles.push(tile);
         }
     
         faceTiles.push(THREE.MathUtils.randInt(3, 64));
@@ -472,17 +470,29 @@ flat varying int tile2;
             do_distances(new THREE.Vector3(cell.position[0], 0, cell.position[1]), 0);
     }
 
-    const dlimit = 7;
-    for (const cell of cells.values()) {
-        const d = distances.get(cell);
-        const u = Math.min(d, dlimit) / (dlimit+1);
-        const hsl = cell.color.getHSL({h:0,s:0,l:0});
-        hsl.l = Math.max((1-u)*.5, 0.025);
-        // hsl.s = 1 - (u*u);
-        // cell.color.setHSL(hsl.h, hsl.s*.85, hsl.l);
-        //cell.color.setHSL((d/16)%1, .75, Math.max(.5-u*.5, 0.05));
-        cell.color.setRGB(1, 1, 1).multiplyScalar(Math.max((1-u)*(1-u), 0.01));
+    function redo_distances() {
+        distances.clear();
+        for (const [coord, char] of CHARMAP.entries()) {
+            const x = char.position.x|0;
+            const z = char.position.z|0;
+            do_distances(new THREE.Vector3(x, 0, z), 0);
+        }
     }
+
+    function do_lights() {
+        const dlimit = 7;
+        for (const cell of cells.values()) {
+            const d = distances.get(cell);
+            const u = Math.min(d, dlimit) / (dlimit+1);
+            const hsl = cell.color.getHSL({h:0,s:0,l:0});
+            hsl.l = Math.max((1-u)*.5, 0.025);
+            // hsl.s = 1 - (u*u);
+            // cell.color.setHSL(hsl.h, hsl.s*.85, hsl.l);
+            //cell.color.setHSL((d/16)%1, .75, Math.max(.5-u*.5, 0.05));
+            cell.color.setRGB(1, 1, 1).multiplyScalar(Math.max((1-u)*(1-u), 0.01));
+        }
+    }
+    do_lights();
 
     function regenerate() {
         roomObjects.children = [];
@@ -565,11 +575,13 @@ flat varying int tile2;
         const drag = new PointerDrag(event);
         const delta = new THREE.Vector3();
         drag.addEventListener("move", (event) => {
-            delta.x += event.detail.movementX;
+            delta.x -= event.detail.movementX;
             delta.z += event.detail.movementY;
         });
 
         drag.addEventListener("up", (event) => {
+            if (drag.totalMovement < 25) return;
+
             delta.normalize();
 
             for (const [dir, vector] of DIRECTIONS.entries()) {
@@ -590,6 +602,47 @@ flat varying int tile2;
         });
     });
 
+    function cycle_tiles() {
+        const { x, z } = GET_POS();
+        const c = coords(x, z);
+        const cell = cells.get(c);
+
+        const floor = THREE.MathUtils.randInt(3, 64);
+        const ceil = THREE.MathUtils.randInt(3, 64);
+        const wall = THREE.MathUtils.randInt(3, 64);
+
+        for (let i = 0; i < 4; ++i) {
+            cell.faceTiles[i] = cell.faceTiles[i] > 0 ? wall : 0;
+        }
+        cell.faceTiles[4] = floor;
+        cell.faceTiles[5] = ceil;
+            
+        regenerate();
+    }
+    
+    function toggle_wall() {
+        const pos = GET_POS();
+        const { x, z } = pos;
+        const { x: nx, z: nz } = pos.add(DIRECTIONS[DIRECTION]);
+
+        const inv = (DIRECTION + 2) % 4;
+
+        const cell = cells.get(coords(x, z));
+        const cell2 = cells.get(coords(nx, nz));
+
+        const wall = THREE.MathUtils.randInt(3, 64);
+
+        cell.faceTiles[DIRECTION] = cell.faceTiles[DIRECTION] > 0 ? 0 : wall;
+        
+        if (cell2) {
+            cell2.faceTiles[inv] = cell2.faceTiles[inv] > 0 ? 0 : wall;
+        }
+            
+        redo_distances();
+        do_lights();
+        regenerate();
+    }
+
     function add_button(label, callback=()=>{}) {
         const button = document.createElement("button");
         button.textContent = label;
@@ -605,9 +658,9 @@ flat varying int tile2;
     const mleft = add_button("⬅️");
     add_button("👁️", toggle_camera);
     const mright = add_button("➡️");
-    add_button("👁️", toggle_camera).style.visibility = "hidden";
+    add_button("🖼️", cycle_tiles);
     const mback = add_button("⬇️");
-    add_button("").style.visibility = "hidden";
+    add_button("🚪", toggle_wall);
 
     const DIR_BUTTONS = [
         mahead,
@@ -691,6 +744,10 @@ flat varying int tile2;
     }
     update();
 
+    function GET_POS() {
+        return new THREE.Vector3(CURRENT_MOVE.b.x|0, 0, CURRENT_MOVE.b.z|0);
+    }
+
     function animate(dt) {
         for (const [key, func] of heldActions) {
             if (HELD_KEYS.has(key) || DOWN_KEYS.has(key)) {
@@ -710,7 +767,7 @@ flat varying int tile2;
 
         for (const [d, button] of DIR_BUTTONS.entries()) {
             const dir = (d + DIRECTION) % 4;
-            const [x, z] = [CURRENT_MOVE.b.x|0, CURRENT_MOVE.b.z|0];
+            const { x, z } = GET_POS();
             
             const char = get_char(x, z, dir);
             const pass = is_passable(x, z, dir);
