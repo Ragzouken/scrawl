@@ -4,6 +4,21 @@ import Stats from "stats";
 import tilesetToTextureArray from "atlas";
 
 /**
+ * Create an html element with the given attributes and children.
+ * @template {keyof HTMLElementTagNameMap} K
+ * @param {K} tagName 
+ * @param {*} attributes 
+ * @param  {...(Node | string)} children 
+ * @returns {HTMLElementTagNameMap[K]}
+ */
+ function html(tagName, attributes = {}, ...children) {
+    const element = /** @type {HTMLElementTagNameMap[K]} */ (document.createElement(tagName)); 
+    Object.entries(attributes).forEach(([name, value]) => element.setAttribute(name, value));
+    children.forEach((child) => element.append(child));
+    return element;
+}
+
+/**
  * @param {HTMLElement} element 
  * @param {boolean} integer
  */
@@ -17,8 +32,7 @@ function scaleElementToParent(element, integer = true) {
 
     if (element.dataset.scale !== scale.toString()) {
         element.dataset.scale = scale.toString();
-        element.style.setProperty("transform", `translate(-50%, -50%) scale(${scale})`);
-        // element.style.setProperty("transform", `scale(${scale})`);
+        element.style.setProperty("scale", `${scale}`);
     }
 
     return scale;
@@ -267,8 +281,87 @@ const pointer = new THREE.Vector2();
 addEventListener("wheel", (event) => resizeOn = false);
 let resizeOn = true;
 
+function setup_ui(canvas) {
+    Object.assign(canvas.style, {
+        "position": "absolute",
+        "z-index": "-1",
+        "border-radius": "1rem",
+        "pointer-events": "all",
+    });
+    document.body.append(canvas);
+
+    const viewport = html("div", { id: "viewport" }); 
+    viewport.style.gridArea = "viewport";
+
+    const border = html("div", { class: "ui-border" }); 
+    border.style.gridArea = "viewport";
+
+    const controls = html("fieldset");
+    Object.assign(controls.style, {
+        "grid-area": "controls",
+
+        "display": "grid",
+        "grid-template-columns": "repeat(3, 1fr)",
+        "grid-template-rows": "repeat(3, 1fr)",
+
+        "padding": ".5em 0",
+        "gap": ".5em",
+
+        "height": "250px",
+        "pointer-events": "all",
+    });
+
+    const dialogueBlockerElement = html("div", { id: "dialogue-blocker", hidden: "" });
+
+    const dialogueContentElement = html("div");
+    dialogueContentElement.style.whiteSpace = "pre-wrap";
+    const dialoguePromptElement = html("div", {}, "🔽");
+    dialoguePromptElement.style = `
+        position: absolute;
+        left: 50%;
+        transform: translate(-50%, .125rem);
+        animation: 1s ease-in-out infinite alternate flash;`
+    const dialogueElement = html("div", { id: "dialogue", class: "ui-border ui-dialogue", hidden: "" }, dialogueContentElement, dialoguePromptElement);
+
+    const main = html(
+        "main", 
+        { class: "centered" },
+        viewport,
+        border,
+        controls,
+        dialogueBlockerElement,
+        dialogueElement,
+    );
+    Object.assign(main.style, {
+        "width": "480px",
+        "height": "768px",
+    });
+    Object.assign(main.style, {
+        "display": "grid",
+        "grid-template": `"viewport" 1fr "controls" min-content`,
+    });
+    document.body.append(main);
+
+    return {
+        main,
+        viewport,
+        controls,
+
+        dialogueElement,
+        dialogueBlockerElement,
+        dialogueContentElement,
+        dialoguePromptElement,
+    }
+}
+
 export default async function start() {
-    const main = document.querySelector("main");
+    const renderer = new THREE.WebGLRenderer({ alpha: true });
+    const { main, viewport, controls,
+        dialogueElement,
+        dialogueBlockerElement,
+        dialogueContentElement,
+        dialoguePromptElement,
+    } = setup_ui(renderer.domElement);
 
     function resize2() {
         if (resizeOn) {
@@ -327,12 +420,6 @@ flat varying int tile2;
         `Welcome to the Cathedral of Shadows! Gather demons and come again!`,
         `Back in the beginning, it was being built to turn the dream of the Thousand Year Kingdom into a reality.`,
     ];
-
-    /** @type {HTMLElement} */
-    const dialogueElement = document.querySelector("#dialogue");
-    const dialogueBlockerElement = document.querySelector("#dialogue-blocker");
-    const dialogueContentElement = document.querySelector("#dialogue-content");
-    const dialoguePromptElement = document.querySelector("#dialogue-prompt");
 
     dialogueElement.addEventListener("pointerdown", () => NEXT_DIALOGUE());
     dialogueBlockerElement.addEventListener("pointerdown", () => NEXT_DIALOGUE());
@@ -525,9 +612,6 @@ flat varying int tile2;
         }
     }
 
-    const renderer = new THREE.WebGLRenderer({ alpha: true });
-    renderer.autoClear = false;
-
     function onPointerMove(event) {
         // calculate pointer position in normalized device coordinates
         // (-1 to +1) for both components
@@ -567,9 +651,6 @@ flat varying int tile2;
     }
     //window.addEventListener("pointermove", onPointerMove);
     //window.addEventListener("pointerdown", onPointerMove);
-
-    document.querySelector("#display").appendChild(renderer.domElement);
-    const controls = document.querySelector("#controls");
 
     renderer.domElement.addEventListener("pointerdown", (event) => {
         const drag = new PointerDrag(event);
@@ -695,38 +776,32 @@ flat varying int tile2;
     linkButtonAction(mleft, "a");
     linkButtonAction(mright, "d");
 
-    /** @type {HTMLElement} */
-    const display = document.querySelector("#display");
-    /** @type {HTMLElement} */
-    const viewport = document.querySelector("#viewport");
-
     function resize() {
         // const parent = renderer.domElement.parentElement;
         const rect = viewport.getBoundingClientRect();
         let { left, top, width, height } = rect;
-        
+
         left = Math.ceil(left)+2;
         top = Math.ceil(top)+2;
         width = Math.floor(width)-2;
         height = Math.floor(height)-2;
 
-        display.style.left = `${left}px`;
-        display.style.top = `${top}px`;
-        display.style.width = `${width}px`;
-        display.style.height = `${height}px`;
-
-        const scale = 1;
-
         renderer.setSize(width, height, true);
-        renderer.setPixelRatio(1/scale);
+        renderer.setPixelRatio(1);
+        Object.assign(renderer.domElement.style, {
+            "left": `${left}px`,
+            "top": `${top}px`,
+        });
 
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
 
-        camera2.left   = 0;
-        camera2.right  = width / scale;
-        camera2.top    = height / scale;
-        camera2.bottom = 0;
+        Object.assign(camera2, {
+            left: 0, 
+            bottom: 0, 
+            top: height,
+            right: width,
+        });
         camera2.updateProjectionMatrix(); 
     }
 
