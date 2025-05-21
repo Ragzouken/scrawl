@@ -123,14 +123,21 @@ function up(key, code) {
 }
 
 function bindButtonToKey(button, key) {
-    button.addEventListener("pointerdown", () => {
+    button.addEventListener("pointerdown", (event) => {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        event.preventDefault();
+        event.stopPropagation();
+
         down(key, "");
+        button.classList.toggle("active2", true);
 
         window.addEventListener("pointerup", () => {
             up(key, "");
+            button.classList.toggle("active2", false);
         }, { once: true });
         window.addEventListener("pointercancel", () => {
             up(key, "");
+            button.classList.toggle("active2", false);
         }, { once: true });
     });
 }
@@ -236,13 +243,9 @@ function generate_world() {
         for (let i = 0; i < length; ++i) {
             const cell = make_cell(cursor.x, cursor.z);
             
-            const hue = j/runs;
-            const darken = (i+1)/length*.5;
-
             if (i > 0)
                 cell.faceTiles[(di+2) % 4] = 0;
             
-            // cell.color.setHSL(hue, .75, .5);
             cell.color.setHSL(0, 0, .5);
 
             if (Math.random() < .5) {
@@ -281,6 +284,26 @@ const pointer = new THREE.Vector2();
 addEventListener("wheel", (event) => resizeOn = false);
 let resizeOn = true;
 
+function setup_dialogue_ui() {
+    const dialogueBlockerElement = html("div", { id: "dialogue-blocker", hidden: "" });
+    const dialogueContentElement = html("div");
+    dialogueContentElement.style.whiteSpace = "pre-wrap";
+    const dialoguePromptElement = html("div", {}, "🔽");
+    dialoguePromptElement.style = `
+        position: absolute;
+        left: 50%;
+        transform: translate(-50%, .125rem);
+        animation: 1s ease-in-out infinite alternate flash;`
+    const dialogueElement = html("div", { id: "dialogue", class: "ui-border ui-dialogue", hidden: "" }, dialogueContentElement, dialoguePromptElement);
+
+    return {
+        dialogueElement,
+        dialogueBlockerElement,
+        dialogueContentElement,
+        dialoguePromptElement,
+    }
+}
+
 function setup_ui(canvas) {
     Object.assign(canvas.style, {
         "position": "absolute",
@@ -296,41 +319,21 @@ function setup_ui(canvas) {
     const border = html("div", { class: "ui-border" }); 
     border.style.gridArea = "viewport";
 
-    const controls = html("fieldset");
-    Object.assign(controls.style, {
-        "grid-area": "controls",
-
-        "display": "grid",
-        "grid-template-columns": "repeat(3, 1fr)",
-        "grid-template-rows": "repeat(3, 1fr)",
-
-        "padding": ".5em 0",
-        "gap": ".5em",
-
-        "height": "250px",
-        "pointer-events": "all",
-    });
-
-    const dialogueBlockerElement = html("div", { id: "dialogue-blocker", hidden: "" });
-
-    const dialogueContentElement = html("div");
-    dialogueContentElement.style.whiteSpace = "pre-wrap";
-    const dialoguePromptElement = html("div", {}, "🔽");
-    dialoguePromptElement.style = `
-        position: absolute;
-        left: 50%;
-        transform: translate(-50%, .125rem);
-        animation: 1s ease-in-out infinite alternate flash;`
-    const dialogueElement = html("div", { id: "dialogue", class: "ui-border ui-dialogue", hidden: "" }, dialogueContentElement, dialoguePromptElement);
+    const {
+        dialogueElement,
+        dialogueBlockerElement,
+        dialogueContentElement,
+        dialoguePromptElement,
+    } = setup_dialogue_ui();
 
     const main = html(
         "main", 
         { class: "centered" },
         viewport,
         border,
-        controls,
-        dialogueBlockerElement,
+
         dialogueElement,
+        dialogueBlockerElement,
     );
     Object.assign(main.style, {
         "width": "480px",
@@ -345,7 +348,6 @@ function setup_ui(canvas) {
     return {
         main,
         viewport,
-        controls,
 
         dialogueElement,
         dialogueBlockerElement,
@@ -356,7 +358,7 @@ function setup_ui(canvas) {
 
 export default async function start() {
     const renderer = new THREE.WebGLRenderer({ alpha: true });
-    const { main, viewport, controls,
+    const { main, viewport,
         dialogueElement,
         dialogueBlockerElement,
         dialogueContentElement,
@@ -724,24 +726,51 @@ flat varying int tile2;
         regenerate();
     }
 
-    function add_button(label, callback=()=>{}) {
+    const controls = html("fieldset", { class: "editor" });
+    Object.assign(controls.style, {
+        "grid-template-columns": "repeat(3, 1fr)",
+        "grid-template-rows": "repeat(3, 1fr)",
+    });
+    main.append(controls);
+
+    const editor = html("fieldset", { class: "editor" });
+    Object.assign(editor.style, {
+        "grid-template-columns": "repeat(4, 1fr)",
+        "grid-template-rows": "repeat(3, 1fr)",
+    });
+
+    function add_button(controls, label, callback=()=>{}) {
         const button = document.createElement("button");
         button.textContent = label;
         button.addEventListener("click", callback);
         button.classList.add("ui-border");
-        controls.appendChild(button);
+        controls.append(button);
         return button;
     }
 
-    const tleft = add_button("↪️");
-    const mahead = add_button("⬆️");
-    const tright = add_button("↩️");
-    const mleft = add_button("⬅️");
-    add_button("👁️", toggle_camera);
-    const mright = add_button("➡️");
-    add_button("🖼️", cycle_tiles);
-    const mback = add_button("⬇️");
-    add_button("🚪", toggle_wall);
+    function switch_to_movement() {
+        editor.remove();
+        main.append(controls);
+    }
+
+    function switch_to_editor() {
+        controls.remove();
+        main.append(editor);
+    }
+
+    add_button(editor, "🔙", switch_to_movement);
+    add_button(editor, "👁️", toggle_camera);
+    add_button(editor, "🚪", toggle_wall);
+    add_button(editor, "🖼️", cycle_tiles)
+
+    const tleft = add_button(controls, "↪️");
+    const mahead = add_button(controls, "⬆️");
+    const tright = add_button(controls, "↩️");
+    const mleft = add_button(controls, "⬅️");
+    add_button(controls, "🛠️", switch_to_editor);
+    const mright = add_button(controls, "➡️");
+    add_button(controls, "").style.visibility = "hidden";
+    const mback = add_button(controls, "⬇️");
 
     const DIR_BUTTONS = [
         mahead,

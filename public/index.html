@@ -56,6 +56,21 @@
   <style>
     fieldset {
       all: unset;
+
+      pointer-events: all;
+    }
+
+    fieldset.editor {
+      grid-area: "controls";
+
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+
+      padding: .5em 0;
+      gap: .5em;
+
+      height: 250px;
     }
 
     button {
@@ -66,7 +81,7 @@
       cursor: pointer;
     }
 
-    button:active, button.active {
+    button:active, button.active, button.active2 {
       filter: brightness(50%);
     }
 
