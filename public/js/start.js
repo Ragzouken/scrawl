@@ -194,43 +194,43 @@ FACE_NORMALS.push(new THREE.Vector3(0, -1, 0));
 FACE_NORMALS.push(new THREE.Vector3(0,  1, 0));
 
 function coords(...coords) {
-    return coords.map((coord) => coord|0).join(",");
+    return coords.map((coord) => Math.floor(coord)).join(",");
+}
+
+function make_cell(grid, x, z) {
+    const co = coords(x, z);
+    
+    if (grid.has(co))
+        return grid.get(co);
+
+    const faceTiles = [];
+
+    const tile = THREE.MathUtils.randInt(3, 64);
+
+    for (let i = 0; i < 4; ++i) {
+        faceTiles.push(tile);
+    }
+
+    faceTiles.push(THREE.MathUtils.randInt(3, 64));
+    faceTiles.push(THREE.MathUtils.randInt(3, 64));
+
+    // faceTiles.push(2);
+    // faceTiles.push(1);
+
+    const cell = {
+        position: [x, z],
+        faceTiles,
+        color: new THREE.Color(),
+    }
+
+    grid.set(co, cell);
+
+    return cell;
 }
 
 function generate_world() {
     /** @type {Map<string, SMTCell>} */
     const grid = new Map();
-
-    function make_cell(x, z) {
-        const co = coords(x, z);
-        
-        if (grid.has(co))
-            return grid.get(co);
-
-        const faceTiles = [];
-
-        const tile = THREE.MathUtils.randInt(3, 64);
-
-        for (let i = 0; i < 4; ++i) {
-            faceTiles.push(tile);
-        }
-    
-        faceTiles.push(THREE.MathUtils.randInt(3, 64));
-        faceTiles.push(THREE.MathUtils.randInt(3, 64));
-
-        // faceTiles.push(2);
-        // faceTiles.push(1);
-
-        const cell = {
-            position: [x, z],
-            faceTiles,
-            color: new THREE.Color(),
-        }
-    
-        grid.set(co, cell);
-
-        return cell;
-    }
 
     const cursor = new THREE.Vector3(0, 0, 0);
     let di = 0;
@@ -241,7 +241,7 @@ function generate_world() {
         const length = THREE.MathUtils.randInt(8, 16);
 
         for (let i = 0; i < length; ++i) {
-            const cell = make_cell(cursor.x, cursor.z);
+            const cell = make_cell(grid, cursor.x, cursor.z);
             
             if (i > 0)
                 cell.faceTiles[(di+2) % 4] = 0;
@@ -478,6 +478,12 @@ flat varying int tile2;
     const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
     const camera2 = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1000);
 
+    const floorPlane = new THREE.Plane();
+    floorPlane.setFromNormalAndCoplanarPoint(
+        new THREE.Vector3(0, -1, 0),
+        new THREE.Vector3(0.5, -.75/2, 0.5),
+    )
+
     scene.fog = new THREE.Fog(0, 1, 7);
 
     const camFixture = new THREE.Object3D();
@@ -599,6 +605,10 @@ flat varying int tile2;
 
     regenerate();
 
+    function IS_OVERHEAD() {
+        return cam == 1;
+    }
+
     let cam = 0;
     function toggle_camera() {
         cam = 1 - cam;
@@ -662,6 +672,29 @@ flat varying int tile2;
             delta.z += event.detail.movementY;
         });
 
+        drag.addEventListener("click", (event) => {
+            const bounds = renderer.domElement.getBoundingClientRect();
+
+            const x = event.detail.clientX - bounds.left;
+            const y = event.detail.clientY - bounds.top;
+
+            pointer.x = x / bounds.width * 2 - 1;
+            pointer.y = -y / bounds.height * 2 + 1;
+
+            raycaster.setFromCamera(pointer, camera);
+            const point = new THREE.Vector3();
+            raycaster.ray.intersectPlane(floorPlane, point);
+
+            point.x += .5;
+            point.z += .5;
+
+            point.floor();
+
+            if (IS_OVERHEAD()) {
+                SET_POS(point.x, point.z);
+            }
+        });
+
         drag.addEventListener("up", (event) => {
             if (drag.totalMovement < 25) return;
 
@@ -714,13 +747,31 @@ flat varying int tile2;
         const cell2 = cells.get(coords(nx, nz));
 
         const wall = THREE.MathUtils.randInt(3, 64);
+        const fill = cell.faceTiles[DIRECTION] > 0
 
-        cell.faceTiles[DIRECTION] = cell.faceTiles[DIRECTION] > 0 ? 0 : wall;
+        cell.faceTiles[DIRECTION] = fill ? 0 : wall;
         
         if (cell2) {
-            cell2.faceTiles[inv] = cell2.faceTiles[inv] > 0 ? 0 : wall;
+            cell2.faceTiles[inv] = fill ? 0 : wall;
         }
             
+        redo_distances();
+        do_lights();
+        regenerate();
+    }
+
+    function toggle_cell() {
+        const pos = GET_POS();
+        const { x, z } = pos;
+        const cell = cells.get(coords(x, z));
+
+        if (cell) {
+            cells.delete(coords(x, z));
+        } else {
+            make_cell(cells, x, z);
+            regenerate();
+        }
+
         redo_distances();
         do_lights();
         regenerate();
@@ -751,6 +802,9 @@ flat varying int tile2;
     function switch_to_movement() {
         editor.remove();
         main.append(controls);
+
+        if (IS_OVERHEAD())
+            toggle_camera();
     }
 
     function switch_to_editor() {
@@ -761,7 +815,8 @@ flat varying int tile2;
     add_button(editor, "🔙", switch_to_movement);
     add_button(editor, "👁️", toggle_camera);
     add_button(editor, "🚪", toggle_wall);
-    add_button(editor, "🖼️", cycle_tiles)
+    add_button(editor, "🖼️", cycle_tiles);
+    add_button(editor, "🛖", toggle_cell);
 
     const tleft = add_button(controls, "↪️");
     const mahead = add_button(controls, "⬆️");
@@ -919,6 +974,12 @@ flat varying int tile2;
 
     function CAN_MOVE() {
         return !IS_IN_DIALOGUE() && !IS_MOVING(); 
+    }
+
+    function SET_POS(x, z) {
+        CURRENT_MOVE.u = 1;
+        CURRENT_MOVE.a.set(x, camFixture.position.y, z);
+        CURRENT_MOVE.b.set(x, camFixture.position.y, z);
     }
 
     function rotate(sign) {
