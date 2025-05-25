@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>scrawl</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    * {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      touch-action: none;
+
+      color: inherit;
+    }
+
+    html {
+      -moz-text-size-adjust: none;
+      -webkit-text-size-adjust: none;
+      text-size-adjust: none;
+    }
+  </style>
+  <style>
+    html {
+      overscroll-behavior: none;
+      pointer-events: none;
+      line-height: 1.5;
+
+      font-family: monospace;
+
+      color: white;
+      background-color: black;
+    }
+  </style>
+  <style>
+    .fullscreen {
+      position: absolute;
+      margin: 0;
+      padding: 0;
+      inset: 0;
+      overflow: hidden;
+    }
+
+    .centered {
+      position: relative;
+      left: 50%;
+      top: 50%;
+      translate: -50% -50%;
+    }
+  </style>
+  <style>
+    fieldset {
+      all: unset;
+
+      pointer-events: all;
+    }
+
+    fieldset.editor {
+      grid-area: "controls";
+
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+
+      padding: .5em 0;
+      gap: .5em;
+
+      height: 250px;
+    }
+
+    button {
+      font-family: inherit;
+      background: darkgrey;
+      font-size: 2rem;
+
+      cursor: pointer;
+    }
+
+    button:active, button.active, button.active2 {
+      filter: brightness(50%);
+    }
+
+    .ui-border {
+      border: solid white .5rem;
+      border-left-color: grey;
+      border-bottom-color: grey;
+      border-radius: 1rem;
+    }
+
+    .ui-dialogue {
+      padding: .5em .75em;
+
+      font-size: 1.5rem;
+      font-family: monospace;
+      line-height: 1.25em;
+    }
+  </style>
+  <style>
+    #dialogue {
+      position: absolute;
+      z-index: 2;
+
+      width: 100%;
+      bottom: 250px;
+      height: min-content;
+
+      background: black;
+      color: white;
+
+      cursor: pointer;
+      pointer-events: all;
+    }
+
+    #dialogue-blocker {
+      position: absolute;
+      background: linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0) 0%, 
+        rgba(0, 0, 0, 1) 2rem);
+
+      width: 100%;
+      top: calc(55% - 2rem);
+      bottom: 0;
+
+      opacity: 0.75;
+
+      cursor: pointer;
+      pointer-events: all;
+    }
+
+    @keyframes flash {
+      from {
+        filter: grayscale() brightness(50%);
+      }
+      to {
+        filter: grayscale() brightness(100%);
+      }
+    }
+  </style>
+</head>
+
+<body class="fullscreen">
+  <!-- LOADING SPLASH -->
+  <style>
+    #loading {
+      border: none;
+      outline: none;
+      background: none;
+      color: white;
+    }
+
+    #loading::backdrop {
+      background: black;
+    }
+  </style>
+  <dialog id="loading">
+    <h1>loading...</h1>
+  </dialog>
+  <script>document.querySelector("#loading").showModal()</script>
+
+  <!-- DYNAMIC IMPORTS -->
+  <script id="importmap" type="application/json">
+    {
+      "imports": {
+        "atlas": "./js/atlas.js",
+        "start": "./js/start.js",
+        "three": "./js/three.module.min.js",
+        "stats": "./js/stats.module.js"
+      }
+    }
+  </script>
+
+  <script>
+    const dataElement = document.getElementById("importmap");
+    const data = JSON.parse(dataElement.textContent);
+    dataElement.remove();
+
+    //data.imports.shit = "./js/test-shit-other.js";
+    const mapElement = document.createElement("script");
+    mapElement.type = "importmap";
+    mapElement.textContent = JSON.stringify(data);
+    document.body.append(mapElement);
+  </script>
+
+  <!-- START AFTER LOADED -->
+  <script type="module">
+    import start from "start";
+    document.addEventListener("DOMContentLoaded", start);
+  </script>
+</body>
+
+</html>
