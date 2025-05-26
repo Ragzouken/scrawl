@@ -660,7 +660,9 @@ flat varying int tile2;
 
             point.floor();
 
-            if (IS_OVERHEAD()) {
+            if (activeControls === fillControls) {
+                toggle_cell(point);
+            } else if (IS_OVERHEAD()) {
                 SET_POS(point);
             }
         });
@@ -744,13 +746,17 @@ flat varying int tile2;
         regenerate();
     }
 
-    function toggle_cell() {
-        const pos = GET_POS();
-        const { x, z } = pos;
+    function toggle_cell(position) {
+        const { x, z } = position;
         const cell = cells.get(coords(x, z));
 
         if (cell) {
             cells.delete(coords(x, z));
+            for (let d = 0; d < 4; ++d) {
+                const nex = position.clone().add(DIRECTIONS[d]);
+                const nei = cells.get(coords(nex.x, nex.z));
+                if (nei) nei.faceTiles[OPPOSITE(d)] = THREE.MathUtils.randInt(3, 64);
+            }
         } else {
             make_cell(cells, x, z);
             regenerate();
@@ -762,23 +768,15 @@ flat varying int tile2;
     }
 
     const moveControls = html("fieldset", { class: "editor" });
-    Object.assign(moveControls.style, {
-        "grid-template-columns": "repeat(3, 1fr)",
-        "grid-template-rows": "repeat(3, 1fr)",
-    });
-    SET_CONTROLS(moveControls);
-
     const editControls = html("fieldset", { class: "editor" });
     Object.assign(editControls.style, {
         "grid-template-columns": "repeat(4, 1fr)",
         "grid-template-rows": "repeat(3, 1fr)",
     });
-
     const carveControls = html("fieldset", { class: "editor" });
-    Object.assign(editControls.style, {
-        "grid-template-columns": "repeat(3, 1fr)",
-        "grid-template-rows": "repeat(3, 1fr)",
-    });
+    const fillControls = html("fieldset", { class: "editor" });
+
+    SET_CONTROLS(moveControls);
 
     function SET_CONTROLS(controls) {
         activeControls.remove();
@@ -801,6 +799,10 @@ flat varying int tile2;
         SET_CONTROLS(carveControls);
     }
 
+    function switch_to_fill() {
+        SET_CONTROLS(fillControls);
+    }
+
     function add_button(controls, label, callback=()=>{}) {
         const button = document.createElement("button");
         button.textContent = label;
@@ -812,10 +814,11 @@ flat varying int tile2;
 
     add_button(editControls, "🔙", switch_to_move);
     add_button(editControls, "👁️", toggle_camera);
-    add_button(editControls, "🚪", toggle_wall);
+    add_button(editControls, "⛏️", switch_to_carve);
+    add_button(editControls, "💣", switch_to_fill);
+    add_button(editControls, "🧱", toggle_wall);
     add_button(editControls, "🖼️", cycle_tiles);
     add_button(editControls, "🛖", toggle_cell);
-    add_button(editControls, "🔪", switch_to_carve);
 
     function add_basic_movement(controls) {
         const tleft  = add_button(controls, "↪️");
@@ -837,6 +840,9 @@ flat varying int tile2;
     add_button(carveControls, "👁️", toggle_camera);
     add_button(carveControls, "🔙", switch_to_edit);
     add_button(carveControls, "🧭", switch_to_move);
+
+    add_button(fillControls, "👁️", toggle_camera);
+    add_button(fillControls, "🔙", switch_to_edit);
 
     const [tleft, mahead, tright] = add_basic_movement(moveControls);
     const mleft = add_button(moveControls, "⬅️");
