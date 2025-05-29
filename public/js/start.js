@@ -178,6 +178,14 @@ document.addEventListener("keyup", (event) => {
  * @property {THREE.Color} color
  */
 
+/**
+ * @typedef {Object} SMTChar
+ * @property {number[]} position
+ * @property {number} direction
+ * @property {number} faceTile
+ * @property {string[]} dialogue
+ */
+
 const ROTATIONS = [];
 
 for (let i = 0; i < 4; ++i) {
@@ -325,9 +333,19 @@ export default async function start() {
     texArrayManager.addImage(charsTex.image, "chars");
     const texArray = texArrayManager.array;
 
-    savedWall = nextWall(-1);
+    savedWall = nextTile("walls", -1);
     savedRoom = nextRoom(-1);
     
+    function randomTile(group) {
+        return randElement(texArrayManager.groups.get(group));
+    }
+
+    function nextTile(group, tile) {
+        const tiles = texArrayManager.groups.get(group);
+        let i = tiles.indexOf(tile) + 1;
+        return tiles[i % tiles.length];
+    }
+
     function randomRoom() {
         const walls = texArrayManager.groups.get("walls");
         const floors = texArrayManager.groups.get("floors");
@@ -341,24 +359,6 @@ export default async function start() {
         const floors = texArrayManager.groups.get("floors");
         let i = Math.max(walls.indexOf(tile), floors.indexOf(tile)) + 1;
         return [walls[i % walls.length], floors[i % floors.length]];
-    }
-
-    function nextWall(tile) {
-        const walls = texArrayManager.groups.get("walls");
-        let i = walls.indexOf(tile) + 1;
-        return walls[i % walls.length];
-    }
-
-    function randomWall() {
-        return randElement(texArrayManager.groups.get("walls"));
-    }
-
-    function randomFloor() {
-        return randElement(texArrayManager.groups.get("floors"));
-    }
-
-    function randomChar() {
-        return randElement(texArrayManager.groups.get("chars"));
     }
 
     const tilesMaterial = new THREE.MeshBasicMaterial({ 
@@ -471,6 +471,7 @@ flat varying int tile2;
     const DIALOGUES = [
         `Welcome to the Cathedral of Shadows! Gather demons and come again!`,
         `Back in the beginning, it was being built to turn the dream of the Thousand Year Kingdom into a reality.`,
+        `Hello noob.`,
     ];
 
     dialogueElement.addEventListener("pointerdown", () => NEXT_DIALOGUE());
@@ -487,7 +488,7 @@ flat varying int tile2;
         if (!CAN_MOVE() || IS_IN_DIALOGUE())
             return;
 
-        // char
+        DIALOGUE_CHAR = char;
         NEXT_DIALOGUE_INDEX = 0;
         NEXT_DIALOGUE();
     }
@@ -495,6 +496,8 @@ flat varying int tile2;
     function IS_IN_DIALOGUE() {
         return !dialogueElement.hidden;
     }
+
+    let DIALOGUE_CHAR = {dialogue: []}
 
     function SHOW_DIALOGUE(text) {
         dialogueElement.hidden = false;
@@ -508,10 +511,10 @@ flat varying int tile2;
     }
 
     function NEXT_DIALOGUE() {
-        const text = DIALOGUES[NEXT_DIALOGUE_INDEX];
+        const text = DIALOGUE_CHAR.dialogue[NEXT_DIALOGUE_INDEX];
         NEXT_DIALOGUE_INDEX += 1;
 
-        dialoguePromptElement.textContent = NEXT_DIALOGUE_INDEX < DIALOGUES.length ? "🔽" : "⏹️";
+        dialoguePromptElement.textContent = NEXT_DIALOGUE_INDEX < DIALOGUE_CHAR.dialogue.length ? "🔽" : "⏹️";
 
         if (text) {
             SHOW_DIALOGUE(text);
@@ -548,19 +551,39 @@ flat varying int tile2;
     const charObjects = new THREE.Object3D();
     scene.add(charObjects);
 
-    function makeChar(tile) {
-        const charTest = new THREE.Mesh(
-            //new THREE.BoxGeometry(1, 1, 1),
-            generateCharGeometry(tile),
+    function make_char(position, direction, tile) {
+        const { x, z } = position;
+        
+        const char = {
+            position: [x, z],
+            direction: direction,
+            dialogue: [randElement(DIALOGUES)],
+            faceTile: tile,
+        }
+
+        chars.set(coords(x, z, direction), char);
+
+        return char;
+    }
+
+    function makeCharObject(char) {
+        const object = new THREE.Mesh(
+            generateCharGeometry(char.faceTile),
             charsMaterial,
         );
-        charTest.position.set(0, 0, 0);
-        charTest.scale.set(.8, .8, .8);
-        charObjects.add(charTest);
-        return charTest;
+        object.scale.set(.8, .8, .8);
+        charObjects.add(object);
+
+        object.lookAt(DIRECTIONS[char.direction]);
+        object.position.set(char.position[0], 0, char.position[1]);
+        object.position.addScaledVector(DIRECTIONS[char.direction], .4);
+
+        return object;
     }
 
     const cells = generate_world();
+    /** @type {Map<unknown, SMTChar>} */
+    const chars = new Map();
 
     const distances = new Map();
     
@@ -588,8 +611,6 @@ flat varying int tile2;
         }
     }
 
-    const CHARMAP = new Map();
-
     const elements = Array.from(cells.values());
     for (let i = 0; i < 8; ++i) {
         const cell = elements.splice(THREE.MathUtils.randInt(0, elements.length-1), 1)[0];
@@ -601,24 +622,32 @@ flat varying int tile2;
                 continue;
 
             success = true;
-
-            const char = makeChar(randomChar());
-            char.lookAt(DIRECTIONS[d]);
-            char.position.set(cell.position[0], 0, cell.position[1]);
-            char.position.addScaledVector(DIRECTIONS[d], .4);
-
-            CHARMAP.set(coords(cell.position[0], cell.position[1], d), char);
+            make_char(new THREE.Vector3(cell.position[0], 0, cell.position[1]), d, randomTile("chars"));
         }
 
         if (success)
             do_distances(new THREE.Vector3(cell.position[0], 0, cell.position[1]), 0);
     }
 
+    on_chars_changed();
+
+    function on_chars_changed() {
+        charObjects.children = [];
+
+        for (const char of chars.values()) {
+            makeCharObject(char);
+        }
+
+        redo_distances();
+        do_lights();
+        regenerate();
+    }
+
     function redo_distances() {
         distances.clear();
-        for (const [coord, char] of CHARMAP.entries()) {
-            const x = char.position.x|0;
-            const z = char.position.z|0;
+        for (const char of chars.values()) {
+            const x = char.position[0];
+            const z = char.position[1];
             do_distances(new THREE.Vector3(x, 0, z), 0);
         }
     }
@@ -767,22 +796,40 @@ flat varying int tile2;
     function cycle_wall() {
         const cell = GET_CELL(GET_POS());
 
-        cell.faceTiles[DIRECTION] = nextWall(cell.faceTiles[DIRECTION]);
+        cell.faceTiles[DIRECTION] = nextTile("walls", cell.faceTiles[DIRECTION]);
         savedWall = cell.faceTiles[DIRECTION];
 
         regenerate();
     }
 
     function paste_wall() {
-        const { x, z } = GET_POS();
-        const c = coords(x, z);
-        const cell = cells.get(c);
-
+        const cell = GET_CELL(GET_POS());
         cell.faceTiles[DIRECTION] = savedWall;
-
         regenerate();
     }
-    
+
+    function toggle_char() {
+        const char = GET_CHAR(GET_POS(), DIRECTION);
+
+        if (char) {
+            chars.delete(coords(char.position[0], char.position[1], char.direction));
+        } else {
+            make_char(GET_POS(), DIRECTION, randomTile("chars"));
+        }
+
+        on_chars_changed();
+    }
+
+    function cycle_char() {
+        const char = GET_CHAR(GET_POS(), DIRECTION);
+
+        if (char) {
+            char.faceTile = nextTile("chars", char.faceTile);
+        }
+
+        on_chars_changed();
+    }
+
     function GET_CELL(position) {
         return cells.get(coords(position.x, position.z));
     }
@@ -807,7 +854,7 @@ flat varying int tile2;
         const cell = cells.get(coords(x, z));
         const cell2 = cells.get(coords(nx, nz));
 
-        const wall = randomWall();
+        const wall = randomTile("walls");
         const fill = cell.faceTiles[DIRECTION] > 0
 
         cell.faceTiles[DIRECTION] = fill ? 0 : wall;
@@ -861,11 +908,11 @@ flat varying int tile2;
     }
 
     const moveControls = make_grid_controls();
-    const editControls = make_grid_controls(4, 3);
+    const editControls = make_grid_controls();
     const carveControls = make_grid_controls();
     const fillControls = make_grid_controls();
     const wallControls = make_grid_controls();
-    const roomControls = make_grid_controls();
+    const charControls = make_grid_controls();
 
     SET_CONTROLS(moveControls);
 
@@ -898,8 +945,8 @@ flat varying int tile2;
         SET_CONTROLS(wallControls);
     }
 
-    function switch_to_room() {
-        SET_CONTROLS(roomControls);
+    function switch_to_char() {
+        SET_CONTROLS(charControls);
     }
 
     function add_button(controls, label, callback=()=>{}) {
@@ -916,6 +963,7 @@ flat varying int tile2;
     add_button(editControls, "⛏️", switch_to_carve);
     add_button(editControls, "💣", switch_to_fill);
     add_button(editControls, "🖼️", switch_to_wall);
+    add_button(editControls, "👻", switch_to_char);
 
     function add_basic_movement(controls) {
         const tleft  = add_button(controls, "↪️");
@@ -949,6 +997,13 @@ flat varying int tile2;
     add_button(wallControls, "🧱", toggle_wall);
     add_button(wallControls, "🖼️", cycle_wall);
     add_button(wallControls, "📋", paste_wall);
+
+    add_basic_movement(charControls); 
+    add_button(charControls, "🔙", switch_to_edit);
+    add_button(charControls, "👁️", toggle_camera);
+    add_button(charControls, "👻", toggle_char);
+    add_button(charControls, "🖼️", cycle_char);
+    add_button(charControls, "💬");
 
     const [tleft, mahead, tright] = add_basic_movement(moveControls);
     const mleft = add_button(moveControls, "⬅️");
@@ -1155,9 +1210,12 @@ flat varying int tile2;
             || cell.faceTiles[direction] == 0;
     }
 
+    function GET_CHAR(position, direction) {
+        return chars.get(coords(position.x, position.z, direction));
+    }
+
     function get_char(x, z, direction) {
-        const char = CHARMAP.get(coords(x, z, direction));
-        return char;
+        return chars.get(coords(x, z, direction));
     }
 
     function move(direction) {
@@ -1414,7 +1472,5 @@ class TextureArrayManager {
         }
 
         this.array.needsUpdate = true;
-
-        console.log(indexes)
     }
 }
