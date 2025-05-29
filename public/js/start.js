@@ -1,8 +1,6 @@
 import * as THREE from "three";
 import Stats from "stats";
 
-import tilesetToTextureArray from "atlas";
-
 /**
  * Create an html element with the given attributes and children.
  * @template {keyof HTMLElementTagNameMap} K
@@ -205,75 +203,6 @@ function coords(...coords) {
     return coords.map((coord) => Math.floor(coord)).join(",");
 }
 
-function make_cell(grid, x, z) {
-    const co = coords(x, z);
-    
-    if (grid.has(co))
-        return grid.get(co);
-
-    const faceTiles = [];
-
-    const tile = THREE.MathUtils.randInt(3, 64);
-
-    for (let i = 0; i < 4; ++i) {
-        faceTiles.push(tile);
-    }
-
-    faceTiles.push(THREE.MathUtils.randInt(3, 64));
-    faceTiles.push(THREE.MathUtils.randInt(3, 64));
-
-    // faceTiles.push(2);
-    // faceTiles.push(1);
-
-    const cell = {
-        position: [x, z],
-        faceTiles,
-        color: new THREE.Color(),
-    }
-
-    grid.set(co, cell);
-
-    return cell;
-}
-
-function generate_world() {
-    /** @type {Map<string, SMTCell>} */
-    const grid = new Map();
-
-    const cursor = new THREE.Vector3(0, 0, 0);
-    let di = 0;
-
-    const runs = THREE.MathUtils.randInt(6, 12);
-
-    for (let j = 0; j < runs; ++j) {
-        const length = THREE.MathUtils.randInt(8, 16);
-
-        for (let i = 0; i < length; ++i) {
-            const cell = make_cell(grid, cursor.x, cursor.z);
-            
-            if (i > 0)
-                cell.faceTiles[OPPOSITE(di)] = 0;
-            
-            cell.color.setHSL(0, 0, .5);
-
-            if (Math.random() < .5) {
-                di = ADD_DIRS(di, randElement([1, 3]));
-            }
-            
-            if (i < length - 1)
-                cell.faceTiles[di] = 0;
-
-            cursor.add(DIRECTIONS[di]);
-            cursor.round();
-        }
-
-        const root = randElement(Array.from(grid.values()));
-        cursor.set(root.position[0], 0, root.position[1]);
-    }
-
-    return grid;
-}
-
 let activeControls = html("fieldset");
 
 const CURRENT_MOVE = {
@@ -382,10 +311,23 @@ export default async function start() {
     }
     resize2();
 
+    const texArrayManager = new TextureArrayManager(24, 24, 1024);
+
     const loader = new THREE.TextureLoader();
     const tilesTex = await loader.loadAsync("assets/tiles.webp");
-    const texArray = await tilesetToTextureArray(tilesTex.image, 24, 24);
-    
+    const charsTex = await loader.loadAsync("assets/chars.webp");
+    texArrayManager.addImage(tilesTex.image, "tiles");
+    texArrayManager.addImage(charsTex.image, "chars");
+    const texArray = texArrayManager.array;
+
+    function randomTile() {
+        return randElement(texArrayManager.groups.get("tiles"));
+    }
+
+    function randomChar() {
+        return randElement(texArrayManager.groups.get("chars"));
+    }
+
     const tilesMaterial = new THREE.MeshBasicMaterial({ 
         map: tilesTex, 
         vertexColors: true, 
@@ -425,6 +367,75 @@ flat varying int tile2;
     const charsMaterial = tilesMaterial.clone();
     // charsMaterial.side = THREE.DoubleSide;
     charsMaterial.onBeforeCompile = tilesMaterial.onBeforeCompile;
+
+    function make_cell(grid, x, z) {
+        const co = coords(x, z);
+        
+        if (grid.has(co))
+            return grid.get(co);
+
+        const faceTiles = [];
+
+        const tile = randomTile();
+
+        for (let i = 0; i < 4; ++i) {
+            faceTiles.push(tile);
+        }
+
+        faceTiles.push(randomTile());
+        faceTiles.push(randomTile());
+
+        // faceTiles.push(2);
+        // faceTiles.push(1);
+
+        const cell = {
+            position: [x, z],
+            faceTiles,
+            color: new THREE.Color(),
+        }
+
+        grid.set(co, cell);
+
+        return cell;
+    }
+
+    function generate_world() {
+        /** @type {Map<string, SMTCell>} */
+        const grid = new Map();
+
+        const cursor = new THREE.Vector3(0, 0, 0);
+        let di = 0;
+
+        const runs = THREE.MathUtils.randInt(6, 12);
+
+        for (let j = 0; j < runs; ++j) {
+            const length = THREE.MathUtils.randInt(8, 16);
+
+            for (let i = 0; i < length; ++i) {
+                const cell = make_cell(grid, cursor.x, cursor.z);
+                
+                if (i > 0)
+                    cell.faceTiles[OPPOSITE(di)] = 0;
+                
+                cell.color.setHSL(0, 0, .5);
+
+                if (Math.random() < .5) {
+                    di = ADD_DIRS(di, randElement([1, 3]));
+                }
+                
+                if (i < length - 1)
+                    cell.faceTiles[di] = 0;
+
+                cursor.add(DIRECTIONS[di]);
+                cursor.round();
+            }
+
+            const root = randElement(Array.from(grid.values()));
+            cursor.set(root.position[0], 0, root.position[1]);
+        }
+
+        return grid;
+    }
 
     let NEXT_DIALOGUE_INDEX = 0;
     const DIALOGUES = [
@@ -562,7 +573,7 @@ flat varying int tile2;
 
             success = true;
 
-            const char = makeChar(4);
+            const char = makeChar(randomChar());
             char.lookAt(DIRECTIONS[d]);
             char.position.set(cell.position[0], 0, cell.position[1]);
             char.position.addScaledVector(DIRECTIONS[d], .4);
@@ -695,9 +706,9 @@ flat varying int tile2;
         const c = coords(x, z);
         const cell = cells.get(c);
 
-        const floor = THREE.MathUtils.randInt(3, 64);
-        const ceil = THREE.MathUtils.randInt(3, 64);
-        const wall = THREE.MathUtils.randInt(3, 64);
+        const floor = randomTile();
+        const ceil = randomTile();
+        const wall = randomTile();
 
         for (let i = 0; i < 4; ++i) {
             cell.faceTiles[i] = cell.faceTiles[i] > 0 ? wall : 0;
@@ -732,7 +743,7 @@ flat varying int tile2;
         const cell = cells.get(coords(x, z));
         const cell2 = cells.get(coords(nx, nz));
 
-        const wall = THREE.MathUtils.randInt(3, 64);
+        const wall = randomTile();
         const fill = cell.faceTiles[DIRECTION] > 0
 
         cell.faceTiles[DIRECTION] = fill ? 0 : wall;
@@ -755,7 +766,7 @@ flat varying int tile2;
             for (let d = 0; d < 4; ++d) {
                 const nex = position.clone().add(DIRECTIONS[d]);
                 const nei = cells.get(coords(nex.x, nex.z));
-                if (nei) nei.faceTiles[OPPOSITE(d)] = THREE.MathUtils.randInt(3, 64);
+                if (nei) nei.faceTiles[OPPOSITE(d)] = randomTile();
             }
         } else {
             make_cell(cells, x, z);
@@ -1236,5 +1247,79 @@ function generateCellGeometry(faceTiles, colors2) {
                 tiles.push(tile);
             }
         }
+    }
+}
+
+class TextureArrayManager {
+    /**
+     * @param {number} width 
+     * @param {number} height
+     * @param {number} limit 
+     */
+    constructor(width, height, limit) {
+        this.width = width;
+        this.height = height;
+
+        this.next = 1;
+        this.limit = limit;
+        
+        const stride = 4 * width * height;
+
+        /** @type {Map<unknown, number[]>} */
+        this.groups = new Map();
+
+        this.data = new Uint8Array(stride * limit);
+
+        this.array = new THREE.DataArrayTexture(this.data, width, height, limit);
+        this.array.image.data = this.data;
+        this.array.colorSpace = THREE.SRGBColorSpace;
+        this.array.format = THREE.RGBAFormat;
+        this.array.type = THREE.UnsignedByteType;
+        this.array.minFilter = THREE.NearestFilter;
+        this.array.magFilter = THREE.NearestFilter;
+        this.array.wrapS = THREE.ClampToEdgeWrapping;
+        this.array.wrapT = THREE.ClampToEdgeWrapping;
+        this.array.unpackAlignment = 4; //more efficient for RGBAFormat
+        this.array.generateMipmaps = false;
+    }
+
+    /**
+     * @param {HTMLImageElement} image 
+     * @param {unknown} group 
+     */
+    addImage(image, group) {
+        const indexes = this.groups.get(group) ?? [];
+        this.groups.set(group, indexes);
+
+        const xcount = Math.floor(image.width / this.width);
+        const ycount = Math.floor(image.height / this.height);
+
+        const canvas = new OffscreenCanvas(image.width, image.height);
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        context.scale(1, -1);
+        context.drawImage(image, 0, -image.height);
+
+        const stride = 4 * this.width * this.height;
+
+        for (let y = 0; y < ycount; ++y) {
+            for (let x = 0; x < xcount; ++x) {
+                const imagedata = context.getImageData(
+                    x * this.width, 
+                    y * this.height, 
+                    this.width, 
+                    this.height
+                );
+
+                const index = this.next;
+                this.data.set(imagedata.data, index * stride);
+                this.next += 1;
+
+                indexes.push(index);
+            }
+        }
+
+        this.array.needsUpdate = true;
+
+        console.log(indexes)
     }
 }
