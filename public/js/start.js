@@ -294,6 +294,9 @@ function setup_ui(canvas) {
     }
 }
 
+let savedWall = 0;
+let savedRoom = [0, 0];
+
 export default async function start() {
     const renderer = new THREE.WebGLRenderer({ alpha: true });
     const { main, viewport,
@@ -314,14 +317,44 @@ export default async function start() {
     const texArrayManager = new TextureArrayManager(24, 24, 1024);
 
     const loader = new THREE.TextureLoader();
-    const tilesTex = await loader.loadAsync("assets/tiles.webp");
+    const wallsTex = await loader.loadAsync("assets/walls.webp");
+    const floorsTex = await loader.loadAsync("assets/floors.webp");
     const charsTex = await loader.loadAsync("assets/chars.webp");
-    texArrayManager.addImage(tilesTex.image, "tiles");
+    texArrayManager.addImage(wallsTex.image, "walls");
+    texArrayManager.addImage(floorsTex.image, "floors");
     texArrayManager.addImage(charsTex.image, "chars");
     const texArray = texArrayManager.array;
 
-    function randomTile() {
-        return randElement(texArrayManager.groups.get("tiles"));
+    savedWall = nextWall(-1);
+    savedRoom = nextRoom(-1);
+    
+    function randomRoom() {
+        const walls = texArrayManager.groups.get("walls");
+        const floors = texArrayManager.groups.get("floors");
+        const i = THREE.MathUtils.randInt(0, walls.length-1);
+
+        return [walls[i], floors[i]];
+    }
+
+    function nextRoom(tile) {
+        const walls = texArrayManager.groups.get("walls");
+        const floors = texArrayManager.groups.get("floors");
+        let i = Math.max(walls.indexOf(tile), floors.indexOf(tile)) + 1;
+        return [walls[i % walls.length], floors[i % floors.length]];
+    }
+
+    function nextWall(tile) {
+        const walls = texArrayManager.groups.get("walls");
+        let i = walls.indexOf(tile) + 1;
+        return walls[i % walls.length];
+    }
+
+    function randomWall() {
+        return randElement(texArrayManager.groups.get("walls"));
+    }
+
+    function randomFloor() {
+        return randElement(texArrayManager.groups.get("floors"));
     }
 
     function randomChar() {
@@ -329,7 +362,7 @@ export default async function start() {
     }
 
     const tilesMaterial = new THREE.MeshBasicMaterial({ 
-        map: tilesTex, 
+        map: wallsTex, 
         vertexColors: true, 
         alphaTest: .5,
     });
@@ -376,17 +409,14 @@ flat varying int tile2;
 
         const faceTiles = [];
 
-        const tile = randomTile();
+        const [wall, floor] = savedRoom;
 
         for (let i = 0; i < 4; ++i) {
-            faceTiles.push(tile);
+            faceTiles.push(wall);
         }
 
-        faceTiles.push(randomTile());
-        faceTiles.push(randomTile());
-
-        // faceTiles.push(2);
-        // faceTiles.push(1);
+        faceTiles.push(floor);
+        faceTiles.push(floor);
 
         const cell = {
             position: [x, z],
@@ -563,7 +593,6 @@ flat varying int tile2;
     const elements = Array.from(cells.values());
     for (let i = 0; i < 8; ++i) {
         const cell = elements.splice(THREE.MathUtils.randInt(0, elements.length-1), 1)[0];
-        // const cell = elements[THREE.MathUtils.randInt(0, elements.length-1)];
 
         let success = false;
 
@@ -701,21 +730,56 @@ flat varying int tile2;
         });
     });
 
-    function cycle_tiles() {
-        const { x, z } = GET_POS();
-        const c = coords(x, z);
-        const cell = cells.get(c);
-
-        const floor = randomTile();
-        const ceil = randomTile();
-        const wall = randomTile();
-
+    function set_room(cell, room) {
+        const [wall, floor] = room;
         for (let i = 0; i < 4; ++i) {
             cell.faceTiles[i] = cell.faceTiles[i] > 0 ? wall : 0;
         }
         cell.faceTiles[4] = floor;
-        cell.faceTiles[5] = ceil;
-            
+        cell.faceTiles[5] = floor;
+    }
+
+    function get_room(cell) {
+        const floor = cell.faceTiles[4];
+        return nextRoom(floor-1);
+    }
+
+    function cycle_room() {
+        const cell = GET_CELL(GET_POS());
+
+        const current = cell.faceTiles[4];
+        savedRoom = nextRoom(current);
+        set_room(cell, savedRoom);
+
+        regenerate();
+    }
+
+    function copy_room() {
+        savedRoom = get_room(GET_CELL(GET_POS()));
+    }
+
+    function paste_room() {
+        set_room(GET_CELL(GET_POS()), savedRoom);
+
+        regenerate();
+    }
+
+    function cycle_wall() {
+        const cell = GET_CELL(GET_POS());
+
+        cell.faceTiles[DIRECTION] = nextWall(cell.faceTiles[DIRECTION]);
+        savedWall = cell.faceTiles[DIRECTION];
+
+        regenerate();
+    }
+
+    function paste_wall() {
+        const { x, z } = GET_POS();
+        const c = coords(x, z);
+        const cell = cells.get(c);
+
+        cell.faceTiles[DIRECTION] = savedWall;
+
         regenerate();
     }
     
@@ -743,7 +807,7 @@ flat varying int tile2;
         const cell = cells.get(coords(x, z));
         const cell2 = cells.get(coords(nx, nz));
 
-        const wall = randomTile();
+        const wall = randomWall();
         const fill = cell.faceTiles[DIRECTION] > 0
 
         cell.faceTiles[DIRECTION] = fill ? 0 : wall;
@@ -766,10 +830,19 @@ flat varying int tile2;
             for (let d = 0; d < 4; ++d) {
                 const nex = position.clone().add(DIRECTIONS[d]);
                 const nei = cells.get(coords(nex.x, nex.z));
-                if (nei) nei.faceTiles[OPPOSITE(d)] = randomTile();
+                if (nei) nei.faceTiles[OPPOSITE(d)] = savedWall;
             }
         } else {
-            make_cell(cells, x, z);
+            const cell = make_cell(cells, x, z);
+            set_room(cell, savedRoom);
+            for (let d = 0; d < 4; ++d) {
+                const nex = position.clone().add(DIRECTIONS[d]);
+                const nei = cells.get(coords(nex.x, nex.z));
+                if (nei) {
+                    cell.faceTiles[d] = 0;
+                    nei.faceTiles[OPPOSITE(d)] = 0;
+                }
+            }
             regenerate();
         }
 
@@ -778,14 +851,21 @@ flat varying int tile2;
         regenerate();
     }
 
-    const moveControls = html("fieldset", { class: "editor" });
-    const editControls = html("fieldset", { class: "editor" });
-    Object.assign(editControls.style, {
-        "grid-template-columns": "repeat(4, 1fr)",
-        "grid-template-rows": "repeat(3, 1fr)",
-    });
-    const carveControls = html("fieldset", { class: "editor" });
-    const fillControls = html("fieldset", { class: "editor" });
+    function make_grid_controls(cols, rows) {
+        const controls = html("fieldset", { class: "editor" });
+        Object.assign(controls.style, {
+            "grid-template-columns": `repeat(${cols}, 1fr)`,
+            "grid-template-rows": `repeat(${rows}, 1fr)`,
+        });
+        return controls;
+    }
+
+    const moveControls = make_grid_controls();
+    const editControls = make_grid_controls(4, 3);
+    const carveControls = make_grid_controls();
+    const fillControls = make_grid_controls();
+    const wallControls = make_grid_controls();
+    const roomControls = make_grid_controls();
 
     SET_CONTROLS(moveControls);
 
@@ -814,6 +894,14 @@ flat varying int tile2;
         SET_CONTROLS(fillControls);
     }
 
+    function switch_to_wall() {
+        SET_CONTROLS(wallControls);
+    }
+
+    function switch_to_room() {
+        SET_CONTROLS(roomControls);
+    }
+
     function add_button(controls, label, callback=()=>{}) {
         const button = document.createElement("button");
         button.textContent = label;
@@ -827,9 +915,7 @@ flat varying int tile2;
     add_button(editControls, "👁️", toggle_camera);
     add_button(editControls, "⛏️", switch_to_carve);
     add_button(editControls, "💣", switch_to_fill);
-    add_button(editControls, "🧱", toggle_wall);
-    add_button(editControls, "🖼️", cycle_tiles);
-    add_button(editControls, "🛖", toggle_cell);
+    add_button(editControls, "🖼️", switch_to_wall);
 
     function add_basic_movement(controls) {
         const tleft  = add_button(controls, "↪️");
@@ -848,12 +934,21 @@ flat varying int tile2;
     }
 
     add_basic_movement(carveControls);
-    add_button(carveControls, "👁️", toggle_camera);
     add_button(carveControls, "🔙", switch_to_edit);
-    add_button(carveControls, "🧭", switch_to_move);
+    add_button(carveControls, "👁️", toggle_camera);
+    add_button(carveControls, "🖼️", cycle_room);
+    add_button(carveControls, "🧪", copy_room)
+    add_button(carveControls, "📋", paste_room);
 
-    add_button(fillControls, "👁️", toggle_camera);
     add_button(fillControls, "🔙", switch_to_edit);
+    add_button(fillControls, "👁️", toggle_camera);
+
+    add_basic_movement(wallControls); 
+    add_button(wallControls, "🔙", switch_to_edit);
+    add_button(wallControls, "👁️", toggle_camera);
+    add_button(wallControls, "🧱", toggle_wall);
+    add_button(wallControls, "🖼️", cycle_wall);
+    add_button(wallControls, "📋", paste_wall);
 
     const [tleft, mahead, tright] = add_basic_movement(moveControls);
     const mleft = add_button(moveControls, "⬅️");
