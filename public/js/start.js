@@ -958,12 +958,12 @@ flat varying int tile2;
         return button;
     }
 
-    add_button(editControls, "🔙", switch_to_move);
+    add_button(editControls, "🧭🔙", switch_to_move);
     add_button(editControls, "👁️", toggle_camera);
-    add_button(editControls, "⛏️", switch_to_carve);
-    add_button(editControls, "💣", switch_to_fill);
-    add_button(editControls, "🖼️", switch_to_wall);
-    add_button(editControls, "👻", switch_to_char);
+    add_button(editControls, "➡️⛏️", switch_to_carve);
+    add_button(editControls, "➡️💣", switch_to_fill);
+    add_button(editControls, "➡️🖼️", switch_to_wall);
+    add_button(editControls, "➡️👻", switch_to_char);
 
     function add_basic_movement(controls) {
         const tleft  = add_button(controls, "↪️");
@@ -982,28 +982,28 @@ flat varying int tile2;
     }
 
     add_basic_movement(carveControls);
-    add_button(carveControls, "🔙", switch_to_edit);
+    add_button(carveControls, "🧭🔙", switch_to_move);
     add_button(carveControls, "👁️", toggle_camera);
-    add_button(carveControls, "🖼️", cycle_room);
+    add_button(carveControls, "🖼️🔁", cycle_room);
     add_button(carveControls, "🧪", copy_room)
     add_button(carveControls, "📋", paste_room);
 
-    add_button(fillControls, "🔙", switch_to_edit);
+    add_button(fillControls, "🧭🔙", switch_to_move);
     add_button(fillControls, "👁️", toggle_camera);
 
     add_basic_movement(wallControls); 
-    add_button(wallControls, "🔙", switch_to_edit);
+    add_button(wallControls, "🧭🔙", switch_to_move);
     add_button(wallControls, "👁️", toggle_camera);
-    add_button(wallControls, "🧱", toggle_wall);
-    add_button(wallControls, "🖼️", cycle_wall);
+    add_button(wallControls, "🧱⁉️", toggle_wall);
+    add_button(wallControls, "🖼️🔁", cycle_wall);
     add_button(wallControls, "📋", paste_wall);
 
     add_basic_movement(charControls); 
-    add_button(charControls, "🔙", switch_to_edit);
+    add_button(charControls, "🧭🔙", switch_to_move);
     add_button(charControls, "👁️", toggle_camera);
-    add_button(charControls, "👻", toggle_char);
-    add_button(charControls, "🖼️", cycle_char);
-    add_button(charControls, "💬");
+    add_button(charControls, "👻⁉️", toggle_char);
+    add_button(charControls, "🖼️🔁", cycle_char);
+    add_button(charControls, "➡️💬");
 
     const [tleft, mahead, tright] = add_basic_movement(moveControls);
     const mleft = add_button(moveControls, "⬅️");
