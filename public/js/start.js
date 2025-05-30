@@ -493,8 +493,13 @@ flat varying int tile2;
         NEXT_DIALOGUE();
     }
 
+    function IS_IN_TEXT_INPUT() {
+        return document.activeElement.tagName == "INPUT"
+            || document.activeElement.tagName == "TEXTAREA";
+    }
+
     function IS_IN_DIALOGUE() {
-        return !dialogueElement.hidden;
+        return !dialogueElement.hidden || IS_IN_TEXT_INPUT();
     }
 
     let DIALOGUE_CHAR = {dialogue: []}
@@ -913,6 +918,7 @@ flat varying int tile2;
     const fillControls = make_grid_controls();
     const wallControls = make_grid_controls();
     const charControls = make_grid_controls();
+    const dialogueControls = make_grid_controls();
 
     SET_CONTROLS(moveControls);
 
@@ -947,6 +953,14 @@ flat varying int tile2;
 
     function switch_to_char() {
         SET_CONTROLS(charControls);
+    }
+
+    function switch_to_dialogue() {
+        const char = GET_CHAR(GET_POS(), DIRECTION);
+        if (char) { 
+            SET_CONTROLS(dialogueControls);
+            textEdit.value = char.dialogue.join("\n\n");
+        }
     }
 
     function add_button(controls, label, callback=()=>{}) {
@@ -985,8 +999,8 @@ flat varying int tile2;
     add_button(carveControls, "🧭🔙", switch_to_move);
     add_button(carveControls, "👁️", toggle_camera);
     add_button(carveControls, "🖼️🔁", cycle_room);
-    add_button(carveControls, "🧪", copy_room)
-    add_button(carveControls, "📋", paste_room);
+    add_button(carveControls, "➡️📋", copy_room)
+    add_button(carveControls, "📋➡️", paste_room);
 
     add_button(fillControls, "🧭🔙", switch_to_move);
     add_button(fillControls, "👁️", toggle_camera);
@@ -1003,7 +1017,22 @@ flat varying int tile2;
     add_button(charControls, "👁️", toggle_camera);
     add_button(charControls, "👻⁉️", toggle_char);
     add_button(charControls, "🖼️🔁", cycle_char);
-    add_button(charControls, "➡️💬");
+    add_button(charControls, "➡️💬", switch_to_dialogue);
+
+    add_button(dialogueControls, "👻🔙", switch_to_char);
+    const textEdit = html("textarea", { class: "ui-dialogue ui-border", id: "dialogue-edit" }, "test");
+    textEdit.style.gridColumn = "1 / 4";
+    textEdit.style.gridRow = "2 / 4";
+    dialogueControls.append(textEdit);
+
+    textEdit.addEventListener("input", () => {
+        const char = GET_CHAR(GET_POS(), DIRECTION);
+        if (!char) {
+            switch_to_edit();
+        } else {
+            char.dialogue = textEdit.value.split("\n\n");
+        }
+    });
 
     const [tleft, mahead, tright] = add_basic_movement(moveControls);
     const mleft = add_button(moveControls, "⬅️");
