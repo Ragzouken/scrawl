@@ -387,18 +387,12 @@ flat varying int tile2;
     charsMaterial.onBeforeCompile = tilesMaterial.onBeforeCompile;
 
     /**
-     * @param {*} grid 
-     * @param {number} x 
-     * @param {number} z 
-     * @returns {SMTCell}
+     * @param {Position} position 
+     * @param {number[]} room
+     * @returns {SMTCellData}
      */
-    function make_cell(grid, x, z) {
-        const co = coords(x, z);
-        
-        if (grid.has(co))
-            return grid.get(co);
-
-        const [wall, floor] = savedRoom;
+    function make_blank_cell(position, room) {
+        const [wall, floor] = room;
         
         const faceTiles = new Array(6).fill(wall);
         faceTiles[4] = floor;
@@ -406,22 +400,52 @@ flat varying int tile2;
 
         const faceWalls = new Array(6).fill(1);
 
-        /** @type {SMTCell} */
+        /** @type {SMTCellData} */
         const cell = {
-            position: [x, z],
+            position,
             faceTiles,
             faceWalls,
-            color: new THREE.Color().getHexString(),
         }
-
-        grid.set(co, cell);
 
         return cell;
     }
 
-    function generate_world() {
-        /** @type {Map<string, SMTCell>} */
-        const grid = new Map();
+    /**
+     * @param {THREE.Vector3} position 
+     * @param {number} direction 
+     * @param {number} tile 
+     * @returns {SMTCharData}
+     */
+    function make_blank_char(position, direction, tile) {
+        const { x, z } = position;
+        
+        /** @type {SMTCharData} */
+        const char = {
+            position: [x, z],
+            direction: direction,
+            dialogue: [randElement(DIALOGUES)],
+            faceTile: tile,
+        }
+
+        return char;
+    }
+
+    /**
+     * @returns {SMTSceneData}
+     */
+    function generate_scene() {
+        const cells = generate_cells();
+        const chars = generate_chars(cells);
+
+        return {
+            cells,
+            chars,
+        };
+    }
+
+    function generate_cells() {
+        /** @type {Map<unknown, SMTCellData>} */
+        const cells = new Map();
 
         const cursor = new THREE.Vector3(0, 0, 0);
         let di = 0;
@@ -432,7 +456,7 @@ flat varying int tile2;
             const length = THREE.MathUtils.randInt(8, 16);
 
             for (let i = 0; i < length; ++i) {
-                const cell = make_cell(grid, cursor.x, cursor.z);
+                const cell = force_cell(cells, cursor);
                 
                 if (i > 0)
                     cell.faceWalls[OPPOSITE(di)] = 0;
@@ -448,11 +472,30 @@ flat varying int tile2;
                 cursor.round();
             }
 
-            const root = randElement(Array.from(grid.values()));
+            const root = randElement(Array.from(cells.values()));
             cursor.set(root.position[0], 0, root.position[1]);
         }
 
-        return grid;
+        return Array.from(cells.values());
+    }
+
+    function generate_chars(cells) {
+        const chars = [];
+        const available = [...cells];
+        
+        for (let i = 0; i < 8; ++i) {
+            const cell = available.splice(THREE.MathUtils.randInt(0, available.length-1), 1)[0];
+
+            for (let d = 0; d < 4; ++d) {
+                if (cell.faceWalls[d] == 0 || Math.random() < .5)
+                    continue;
+
+                const char = make_blank_char(new THREE.Vector3(cell.position[0], 0, cell.position[1]), d, randomTile("chars"));
+                chars.push(char);
+            }
+        }
+
+        return chars;
     }
 
     let NEXT_DIALOGUE_INDEX = 0;
@@ -545,15 +588,8 @@ flat varying int tile2;
     scene.add(charObjects);
 
     function make_char(position, direction, tile) {
+        const char = make_blank_char(position, direction, tile);
         const { x, z } = position;
-        
-        const char = {
-            position: [x, z],
-            direction: direction,
-            dialogue: [randElement(DIALOGUES)],
-            faceTile: tile,
-        }
-
         chars.set(coords(x, z, direction), char);
 
         return char;
@@ -574,8 +610,11 @@ flat varying int tile2;
         return object;
     }
 
-    const cells = generate_world();
-    /** @type {Map<unknown, SMTChar>} */
+    const sceneData = generate_scene();
+
+    /** @type {Map<string, SMTCellData>} */
+    const cells = new Map();
+    /** @type {Map<string, SMTCharData>} */
     const chars = new Map();
 
     const distances = new Map();
@@ -604,75 +643,67 @@ flat varying int tile2;
         }
     }
 
-    const elements = Array.from(cells.values());
-    for (let i = 0; i < 8; ++i) {
-        const cell = elements.splice(THREE.MathUtils.randInt(0, elements.length-1), 1)[0];
-
-        let success = false;
-
-        for (let d = 0; d < 4; ++d) {
-            if (cell.faceWalls[d] == 0 || Math.random() < .5)
-                continue;
-
-            success = true;
-            make_char(new THREE.Vector3(cell.position[0], 0, cell.position[1]), d, randomTile("chars"));
-        }
-
-        if (success)
-            do_distances(new THREE.Vector3(cell.position[0], 0, cell.position[1]), 0);
-    }
-
     /** @type {Map<string, THREE.Color>} */
     const cellColors = new Map();
     
-    function do_lights() {
-        const dlimit = 7;
-        for (const cell of cells.values()) {
-            const d = distances.get(cell);
-            const u = Math.min(d, dlimit) / (dlimit+1);
-
-            const v = 1; //Math.max((1-u)*(1-u), 0.01);
-            const color = new THREE.Color(v, v, v);
-            cellColors.set(coords(...cell.position), color);
-        }
-    }
-
-    on_chars_changed();
-
-    function on_chars_changed() {
-        charObjects.children = [];
-
-        for (const char of chars.values()) {
-            makeCharObject(char);
-        }
-
-        redo_distances();
-        do_lights();
-        regenerate();
-    }
-
-    function redo_distances() {
+    function calculate_lights() {
         distances.clear();
         for (const char of chars.values()) {
             const x = char.position[0];
             const z = char.position[1];
             do_distances(new THREE.Vector3(x, 0, z), 0);
         }
+
+        cellColors.clear();
+        const dlimit = 7;
+        for (const cell of cells.values()) {
+            const d = distances.get(cell);
+            const u = Math.min(d, dlimit) / (dlimit+1);
+            const v = Math.max((1-u)*(1-u), 0.01);
+            const color = new THREE.Color(v, v, v);
+            cellColors.set(coords(...cell.position), color);
+        }
     }
 
+    regenerate();
+
     function regenerate() {
+        cells.clear();
+        for (const cell of sceneData.cells) {
+            cells.set(coords(...cell.position), cell);
+        }
+
+        chars.clear();
+        for (const char of sceneData.chars) {
+            chars.set(coords(...char.position, char.direction), char);
+        }
+
+        calculate_lights();
+        
+        regenerate_cells();
+        regenerate_chars();
+    }
+
+    function regenerate_cells() {
         roomObjects.children = [];
 
         for (const [coord, cell] of cells) {
             const [x, z] = cell.position;
 
-            const tile = new THREE.Mesh(generateCellGeometry(cell), tilesMaterial);
-            tile.position.set(x, 0, z);
-            roomObjects.add(tile);
+            const geometry = generateCellGeometry(cell, cellColors.get(coord));
+            const object = new THREE.Mesh(geometry, tilesMaterial);
+            object.position.set(x, 0, z);
+            roomObjects.add(object);
         }
     }
 
-    regenerate();
+    function regenerate_chars() {
+        charObjects.children = [];
+
+        for (const char of chars.values()) {
+            makeCharObject(char);
+        }
+    }
 
     function IS_OVERHEAD() {
         return cam == 1;
@@ -751,7 +782,7 @@ flat varying int tile2;
     });
 
     /**
-     * @param {SMTCell} cell 
+     * @param {SMTCellData} cell 
      * @param {number[]} room 
      */
     function set_room(cell, room) {
@@ -774,7 +805,7 @@ flat varying int tile2;
         savedRoom = nextRoom(current);
         set_room(cell, savedRoom);
 
-        regenerate();
+        regenerate_cells();
     }
 
     function copy_room() {
@@ -784,7 +815,7 @@ flat varying int tile2;
     function paste_room() {
         set_room(GET_CELL(GET_POS()), savedRoom);
 
-        regenerate();
+        regenerate_cells();
     }
 
     function cycle_wall() {
@@ -793,13 +824,13 @@ flat varying int tile2;
         cell.faceTiles[DIRECTION] = nextTile("walls", cell.faceTiles[DIRECTION]);
         savedWall = cell.faceTiles[DIRECTION];
 
-        regenerate();
+        regenerate_cells();
     }
 
     function paste_wall() {
         const cell = GET_CELL(GET_POS());
         cell.faceTiles[DIRECTION] = savedWall;
-        regenerate();
+        regenerate_cells();
     }
 
     function toggle_char() {
@@ -811,7 +842,9 @@ flat varying int tile2;
             make_char(GET_POS(), DIRECTION, randomTile("chars"));
         }
 
-        on_chars_changed();
+        sceneData.chars = [...chars.values()];
+
+        regenerate();
     }
 
     function cycle_char() {
@@ -821,15 +854,37 @@ flat varying int tile2;
             char.faceTile = nextTile("chars", char.faceTile);
         }
 
-        on_chars_changed();
+        regenerate();
     }
 
     function GET_CELL(position) {
         return cells.get(coords(position.x, position.z));
     }
 
+    /**
+     * @param {THREE.Vector3} position 
+     * @returns {SMTCellData}
+     */
+    function force_cell(cells, position) {
+        const { x, z } = position;
+        const co = coords(x, z);
+        
+        if (cells.has(co))
+            return cells.get(co);
+
+        const cell = make_blank_cell([x, z], savedRoom);
+        
+        cells.set(co, cell);
+
+        return cell;
+    }
+
+    /**
+     * @param {THREE.Vector3} position 
+     * @returns {SMTCellData}
+     */
     function FORCE_CELL(position) {
-        return make_cell(cells, position.x, position.z);
+        return force_cell(cells, position);
     }
 
     function CARVE_PATH(position, direction) {
@@ -853,7 +908,7 @@ flat varying int tile2;
         cell.faceWalls[DIRECTION] = wall;
         if (cell2) cell2.faceWalls[OPPOSITE(DIRECTION)] = wall;
             
-        on_chars_changed();
+        regenerate();
     }
 
     function toggle_cell(position) {
@@ -868,7 +923,7 @@ flat varying int tile2;
                 if (nei) nei.faceWalls[OPPOSITE(d)] = 1;
             }
         } else {
-            const cell = make_cell(cells, x, z);
+            const cell = force_cell(cells, x, z);
             set_room(cell, savedRoom);
             for (let d = 0; d < 4; ++d) {
                 const nex = position.clone().add(DIRECTIONS[d]);
@@ -878,10 +933,10 @@ flat varying int tile2;
                     nei.faceWalls[OPPOSITE(d)] = 0;
                 }
             }
-            regenerate();
+            regenerate_cells();
         }
 
-        on_chars_changed();
+        regenerate();
     }
 
     function make_grid_controls(cols, rows) {
@@ -1288,9 +1343,6 @@ flat varying int tile2;
 
             if (IS_CARVING()) {
                 CARVE_PATH(GET_POS(), direction);
-                
-                redo_distances();
-                do_lights();
                 regenerate();
             }
 
@@ -1374,10 +1426,10 @@ function generateCharGeometry(tile) {
 }
 
 /**
- * @param {SMTCell} cell 
+ * @param {SMTCellData} cell 
  * @returns {THREE.BufferGeometry}
  */
-function generateCellGeometry(cell) {
+function generateCellGeometry(cell, color) {
     const geometry = new THREE.BufferGeometry();
 
     const positions = [];
@@ -1388,7 +1440,6 @@ function generateCellGeometry(cell) {
     const indexes = [];
 
     const quat = new THREE.Quaternion();
-    const color = new THREE.Color(cell.color);
 
     for (let i = 0; i < 4; ++i) {
         addFace(ROTATIONS[i], color, cell.faceTiles[i] * cell.faceWalls[i]);

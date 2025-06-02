@@ -1,17 +1,22 @@
 /** @typedef {number[]} Position */
 
 /**
- * @typedef {Object} SMTCell
+ * @typedef {Object} SMTCellData
  * @property {Position} position
  * @property {number[]} faceTiles
  * @property {number[]} faceWalls
- * @property {string} color
  */
 
 /**
- * @typedef {Object} SMTChar
+ * @typedef {Object} SMTCharData
  * @property {Position} position
  * @property {number} direction
  * @property {number} faceTile
  * @property {string[]} dialogue
+ */
+
+/**
+ * @typedef {Object} SMTSceneData
+ * @property {SMTCellData[]} cells
+ * @property {SMTCharData[]} chars
  */
