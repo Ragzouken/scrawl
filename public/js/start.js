@@ -171,21 +171,6 @@ document.addEventListener("keyup", (event) => {
     }
 });
 
-/**
- * @typedef {Object} SMTCell
- * @property {number[]} position
- * @property {number[]} faceTiles
- * @property {THREE.Color} color
- */
-
-/**
- * @typedef {Object} SMTChar
- * @property {number[]} position
- * @property {number} direction
- * @property {number} faceTile
- * @property {string[]} dialogue
- */
-
 const ROTATIONS = [];
 
 for (let i = 0; i < 4; ++i) {
@@ -401,27 +386,32 @@ flat varying int tile2;
     // charsMaterial.side = THREE.DoubleSide;
     charsMaterial.onBeforeCompile = tilesMaterial.onBeforeCompile;
 
+    /**
+     * @param {*} grid 
+     * @param {number} x 
+     * @param {number} z 
+     * @returns {SMTCell}
+     */
     function make_cell(grid, x, z) {
         const co = coords(x, z);
         
         if (grid.has(co))
             return grid.get(co);
 
-        const faceTiles = [];
-
         const [wall, floor] = savedRoom;
+        
+        const faceTiles = new Array(6).fill(wall);
+        faceTiles[4] = floor;
+        faceTiles[5] = floor;
 
-        for (let i = 0; i < 4; ++i) {
-            faceTiles.push(wall);
-        }
+        const faceWalls = new Array(6).fill(1);
 
-        faceTiles.push(floor);
-        faceTiles.push(floor);
-
+        /** @type {SMTCell} */
         const cell = {
             position: [x, z],
             faceTiles,
-            color: new THREE.Color(),
+            faceWalls,
+            color: new THREE.Color().getHexString(),
         }
 
         grid.set(co, cell);
@@ -445,16 +435,14 @@ flat varying int tile2;
                 const cell = make_cell(grid, cursor.x, cursor.z);
                 
                 if (i > 0)
-                    cell.faceTiles[OPPOSITE(di)] = 0;
-                
-                cell.color.setHSL(0, 0, .5);
+                    cell.faceWalls[OPPOSITE(di)] = 0;
 
                 if (Math.random() < .5) {
                     di = ADD_DIRS(di, randElement([1, 3]));
                 }
                 
                 if (i < length - 1)
-                    cell.faceTiles[di] = 0;
+                    cell.faceWalls[di] = 0;
 
                 cursor.add(DIRECTIONS[di]);
                 cursor.round();
@@ -608,7 +596,7 @@ flat varying int tile2;
         distance += 1;
 
         for (let i = 0; i < 4; ++i) {
-            if (cell.faceTiles[i] != 0)
+            if (cell.faceWalls[i] != 0)
                 continue;
 
             const next = DIRECTIONS[i].clone().add(position);
@@ -623,7 +611,7 @@ flat varying int tile2;
         let success = false;
 
         for (let d = 0; d < 4; ++d) {
-            if (cell.faceTiles[d] == 0 || Math.random() < .5)
+            if (cell.faceWalls[d] == 0 || Math.random() < .5)
                 continue;
 
             success = true;
@@ -632,6 +620,21 @@ flat varying int tile2;
 
         if (success)
             do_distances(new THREE.Vector3(cell.position[0], 0, cell.position[1]), 0);
+    }
+
+    /** @type {Map<string, THREE.Color>} */
+    const cellColors = new Map();
+    
+    function do_lights() {
+        const dlimit = 7;
+        for (const cell of cells.values()) {
+            const d = distances.get(cell);
+            const u = Math.min(d, dlimit) / (dlimit+1);
+
+            const v = 1; //Math.max((1-u)*(1-u), 0.01);
+            const color = new THREE.Color(v, v, v);
+            cellColors.set(coords(...cell.position), color);
+        }
     }
 
     on_chars_changed();
@@ -657,30 +660,13 @@ flat varying int tile2;
         }
     }
 
-    function do_lights() {
-        const dlimit = 7;
-        for (const cell of cells.values()) {
-            const d = distances.get(cell);
-            const u = Math.min(d, dlimit) / (dlimit+1);
-            const hsl = cell.color.getHSL({h:0,s:0,l:0});
-            hsl.l = Math.max((1-u)*.5, 0.025);
-            // hsl.s = 1 - (u*u);
-            // cell.color.setHSL(hsl.h, hsl.s*.85, hsl.l);
-            //cell.color.setHSL((d/16)%1, .75, Math.max(.5-u*.5, 0.05));
-            cell.color.setRGB(1, 1, 1).multiplyScalar(Math.max((1-u)*(1-u), 0.01));
-        }
-    }
-    do_lights();
-
     function regenerate() {
         roomObjects.children = [];
 
         for (const [coord, cell] of cells) {
             const [x, z] = cell.position;
 
-            const colors = new Array(6).fill(cell.color);
-
-            const tile = new THREE.Mesh(generateCellGeometry(cell.faceTiles, colors), tilesMaterial);
+            const tile = new THREE.Mesh(generateCellGeometry(cell), tilesMaterial);
             tile.position.set(x, 0, z);
             roomObjects.add(tile);
         }
@@ -764,11 +750,14 @@ flat varying int tile2;
         });
     });
 
+    /**
+     * @param {SMTCell} cell 
+     * @param {number[]} room 
+     */
     function set_room(cell, room) {
         const [wall, floor] = room;
-        for (let i = 0; i < 4; ++i) {
-            cell.faceTiles[i] = cell.faceTiles[i] > 0 ? wall : 0;
-        }
+
+        cell.faceTiles.fill(wall);
         cell.faceTiles[4] = floor;
         cell.faceTiles[5] = floor;
     }
@@ -847,8 +836,8 @@ flat varying int tile2;
         const a = FORCE_CELL(position);
         const b = FORCE_CELL(position.clone().add(DIRECTIONS[direction]));
 
-        a.faceTiles[direction] = 0;
-        b.faceTiles[OPPOSITE(direction)] = 0;
+        a.faceWalls[direction] = 0;
+        b.faceWalls[OPPOSITE(direction)] = 0;
     }
 
     function toggle_wall() {
@@ -859,18 +848,12 @@ flat varying int tile2;
         const cell = cells.get(coords(x, z));
         const cell2 = cells.get(coords(nx, nz));
 
-        const wall = randomTile("walls");
-        const fill = cell.faceTiles[DIRECTION] > 0
+        const wall = 1 - cell.faceWalls[DIRECTION];
 
-        cell.faceTiles[DIRECTION] = fill ? 0 : wall;
-        
-        if (cell2) {
-            cell2.faceTiles[OPPOSITE(DIRECTION)] = fill ? 0 : wall;
-        }
+        cell.faceWalls[DIRECTION] = wall;
+        if (cell2) cell2.faceWalls[OPPOSITE(DIRECTION)] = wall;
             
-        redo_distances();
-        do_lights();
-        regenerate();
+        on_chars_changed();
     }
 
     function toggle_cell(position) {
@@ -882,7 +865,7 @@ flat varying int tile2;
             for (let d = 0; d < 4; ++d) {
                 const nex = position.clone().add(DIRECTIONS[d]);
                 const nei = cells.get(coords(nex.x, nex.z));
-                if (nei) nei.faceTiles[OPPOSITE(d)] = savedWall;
+                if (nei) nei.faceWalls[OPPOSITE(d)] = 1;
             }
         } else {
             const cell = make_cell(cells, x, z);
@@ -891,16 +874,14 @@ flat varying int tile2;
                 const nex = position.clone().add(DIRECTIONS[d]);
                 const nei = cells.get(coords(nex.x, nex.z));
                 if (nei) {
-                    cell.faceTiles[d] = 0;
-                    nei.faceTiles[OPPOSITE(d)] = 0;
+                    cell.faceWalls[d] = 0;
+                    nei.faceWalls[OPPOSITE(d)] = 0;
                 }
             }
             regenerate();
         }
 
-        redo_distances();
-        do_lights();
-        regenerate();
+        on_chars_changed();
     }
 
     function make_grid_controls(cols, rows) {
@@ -919,10 +900,15 @@ flat varying int tile2;
     const wallControls = make_grid_controls();
     const charControls = make_grid_controls();
     const dialogueControls = make_grid_controls();
+    const fileControls = make_grid_controls();
+    const fastControls = make_grid_controls();
+
+    let prevControls;
 
     SET_CONTROLS(moveControls);
 
     function SET_CONTROLS(controls) {
+        prevControls = activeControls;
         activeControls.remove();
         activeControls = controls;
         main.append(activeControls);
@@ -955,6 +941,14 @@ flat varying int tile2;
         SET_CONTROLS(charControls);
     }
 
+    function switch_to_file() {
+        SET_CONTROLS(fileControls);
+    }
+
+    function switch_to_fast_controls() {
+        SET_CONTROLS(fastControls);
+    }
+
     function switch_to_dialogue() {
         const char = GET_CHAR(GET_POS(), DIRECTION);
         if (char) { 
@@ -972,12 +966,26 @@ flat varying int tile2;
         return button;
     }
 
+    function add_quick_button(controls) {
+        const button = add_button(controls, "💡", switch_to_fast_controls);
+        button.style.gridColumn = "2 / 3";
+        button.style.gridRow = "2 / 3";
+        return button;
+    }
+
+    add_button(fastControls, "💾");
+    add_button(fastControls, "↩️");
+    add_button(fastControls, "↪️");
+    add_button(fastControls, "👁️", toggle_camera);
+    add_button(fastControls, "🔙", () => SET_CONTROLS(prevControls));
+
+    add_quick_button(editControls);
     add_button(editControls, "🧭🔙", switch_to_move);
-    add_button(editControls, "👁️", toggle_camera);
     add_button(editControls, "➡️⛏️", switch_to_carve);
     add_button(editControls, "➡️💣", switch_to_fill);
-    add_button(editControls, "➡️🖼️", switch_to_wall);
+    add_button(editControls, "➡️🧱", switch_to_wall);
     add_button(editControls, "➡️👻", switch_to_char);
+    add_button(editControls, "➡️🗄️", switch_to_file);
 
     function add_basic_movement(controls) {
         const tleft  = add_button(controls, "↪️");
@@ -996,28 +1004,34 @@ flat varying int tile2;
     }
 
     add_basic_movement(carveControls);
+    add_quick_button(carveControls);
     add_button(carveControls, "🧭🔙", switch_to_move);
-    add_button(carveControls, "👁️", toggle_camera);
     add_button(carveControls, "🖼️🔁", cycle_room);
     add_button(carveControls, "➡️📋", copy_room)
     add_button(carveControls, "📋➡️", paste_room);
 
+    add_quick_button(fillControls);
     add_button(fillControls, "🧭🔙", switch_to_move);
-    add_button(fillControls, "👁️", toggle_camera);
 
     add_basic_movement(wallControls); 
+    add_quick_button(wallControls);
     add_button(wallControls, "🧭🔙", switch_to_move);
-    add_button(wallControls, "👁️", toggle_camera);
     add_button(wallControls, "🧱⁉️", toggle_wall);
     add_button(wallControls, "🖼️🔁", cycle_wall);
     add_button(wallControls, "📋", paste_wall);
 
     add_basic_movement(charControls); 
+    add_quick_button(charControls);
     add_button(charControls, "🧭🔙", switch_to_move);
-    add_button(charControls, "👁️", toggle_camera);
     add_button(charControls, "👻⁉️", toggle_char);
     add_button(charControls, "🖼️🔁", cycle_char);
     add_button(charControls, "➡️💬", switch_to_dialogue);
+
+    add_button(fileControls, "🧭🔙", switch_to_move);
+    add_button(fileControls, "📥🧱");
+    add_button(fileControls, "📥👻");
+    add_button(fileControls, "📤📦");
+
 
     add_button(dialogueControls, "👻🔙", switch_to_char);
     const textEdit = html("textarea", { class: "ui-dialogue ui-border", id: "dialogue-edit" }, "test");
@@ -1236,7 +1250,7 @@ flat varying int tile2;
         const cell = cells.get(coords(x, z));
         return IS_CARVING() 
             || cell == undefined 
-            || cell.faceTiles[direction] == 0;
+            || cell.faceWalls[direction] == 0;
     }
 
     function GET_CHAR(position, direction) {
@@ -1343,7 +1357,7 @@ function generateCharGeometry(tile) {
 
             vec2.set(xrange[x], yrange[y]);
             vec2.toArray(uvs, uvs.length);
-
+            
             color.toArray(colors, colors.length);
 
             tiles.push(tile);
@@ -1359,7 +1373,11 @@ function generateCharGeometry(tile) {
     return geometry;
 }
 
-function generateCellGeometry(faceTiles, colors2) {
+/**
+ * @param {SMTCell} cell 
+ * @returns {THREE.BufferGeometry}
+ */
+function generateCellGeometry(cell) {
     const geometry = new THREE.BufferGeometry();
 
     const positions = [];
@@ -1370,18 +1388,16 @@ function generateCellGeometry(faceTiles, colors2) {
     const indexes = [];
 
     const quat = new THREE.Quaternion();
-
-    
+    const color = new THREE.Color(cell.color);
 
     for (let i = 0; i < 4; ++i) {
-        const tile = faceTiles[i];
-        addFace(ROTATIONS[i], colors2[i], tile);
+        addFace(ROTATIONS[i], color, cell.faceTiles[i] * cell.faceWalls[i]);
     }
 
     quat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI *  .5);
-    addFace(quat, colors2[4], faceTiles[4]);
+    addFace(quat, color, cell.faceTiles[4] * cell.faceWalls[4]);
     quat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI * -.5);
-    addFace(quat, colors2[5], faceTiles[5]);
+    addFace(quat, color, cell.faceTiles[5] * cell.faceWalls[5]);
 
     geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
     geometry.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(uvs), 2));
