@@ -250,6 +250,30 @@ function setup_ui(canvas) {
     const border = html("div", { class: "ui-border" }); 
     border.style.gridArea = "viewport";
 
+    const tokens = html("div", {}, "🩸🩸🩸🩸🩸🩸🦴🦴")
+    const hud = html("div", { id: "hud" }, tokens);
+    hud.style.gridArea = "viewport";
+
+    Object.assign(hud.style, {
+        "font-size": "2rem",
+        // "padding": "1em",
+        "display": "grid",
+        "align-content": "end",
+        "justify-content": "stretch",
+    });
+
+    Object.assign(tokens.style, {
+        // "backdrop-filter": "blur(10px)",
+        // "background": "black",
+        "border-radius": ".5em",
+        "padding": "1em",
+        "padding-top": "1.5em",
+        "text-align": "center",
+        // "letter-spacing": "-.25em",
+        // "background": "radial-gradient(ellipse closest-side, black, transparent)",
+        "background": "linear-gradient(to bottom, transparent, rgb(0 0 0 / 75%) 1em)",
+    });
+
     const {
         dialogueElement,
         dialogueBlockerElement,
@@ -261,6 +285,7 @@ function setup_ui(canvas) {
         "main", 
         { class: "centered" },
         viewport,
+        hud,
         border,
 
         dialogueElement,
@@ -307,20 +332,32 @@ export default async function start() {
     }
     resize2();
 
-    const texArrayManager = new TextureArrayManager(24, 24, 1024);
+    const texArrayManager = new TextureArrayManager(64, 64, 1024);
+    const texArrayManagerChars = new TextureArrayManager(64, 64, 1024);
 
     const loader = new THREE.TextureLoader();
-    const wallsTex = await loader.loadAsync("assets/walls.webp");
-    const floorsTex = await loader.loadAsync("assets/floors.webp");
-    const charsTex = await loader.loadAsync("assets/chars.webp");
+    const wallsTex = await loader.loadAsync("assets/walls2.webp");
+    const floorsTex = await loader.loadAsync("assets/floors2.webp");
+    const charsTex = await loader.loadAsync("assets/chars2.webp");
     texArrayManager.addImage(wallsTex.image, "walls");
     texArrayManager.addImage(floorsTex.image, "floors");
-    texArrayManager.addImage(charsTex.image, "chars");
+    texArrayManagerChars.addImage(charsTex.image, "chars");
     const texArray = texArrayManager.array;
+    const charArray = texArrayManagerChars.array;
 
     savedWall = nextTile("walls", -1);
     savedRoom = nextRoom(-1);
     
+    function randomTileChars(group) {
+        return randElement(texArrayManagerChars.groups.get(group));
+    }
+
+    function nextTileChars(group, tile) {
+        const tiles = texArrayManager.groups.get(group);
+        let i = tiles.indexOf(tile) + 1;
+        return tiles[i % tiles.length];
+    }
+
     function randomTile(group) {
         return randElement(texArrayManager.groups.get(group));
     }
@@ -352,11 +389,11 @@ export default async function start() {
         alphaTest: .5,
     });
 
-    tilesMaterial.onBeforeCompile = function(shader) {
+    function replaceShader(shader) {
         const vertexExtra = `
-attribute int tile;
-flat varying int tile2;       
-`
+        attribute int tile;
+        flat varying int tile2;       
+        `
 
         shader.vertexShader = shader.vertexShader.replace("#include <uv_pars_vertex>", "#include <uv_pars_vertex>\n" + vertexExtra);
         
@@ -378,13 +415,20 @@ flat varying int tile2;
             `vec4 sampledDiffuseColor = texture(tileset, vec3(vMapUv, tile2));
             diffuseColor *= sampledDiffuseColor;
         `);
+    }
 
+    tilesMaterial.onBeforeCompile = function(shader) {
+        replaceShader(shader);
         shader.uniforms.tileset = { value: texArray };
     }
 
     const charsMaterial = tilesMaterial.clone();
-    // charsMaterial.side = THREE.DoubleSide;
-    charsMaterial.onBeforeCompile = tilesMaterial.onBeforeCompile;
+    charsMaterial.map = charsTex;
+    charsMaterial.side = THREE.DoubleSide;
+    charsMaterial.onBeforeCompile = function(shader) {
+        replaceShader(shader);
+        shader.uniforms.tileset = { value: charArray };
+    }
 
     /**
      * @param {Position} position 
@@ -490,7 +534,7 @@ flat varying int tile2;
                 if (cell.faceWalls[d] == 0 || Math.random() < .5)
                     continue;
 
-                const char = make_blank_char(new THREE.Vector3(cell.position[0], 0, cell.position[1]), d, randomTile("chars"));
+                const char = make_blank_char(new THREE.Vector3(cell.position[0], 0, cell.position[1]), d, randomTileChars("chars"));
                 chars.push(char);
             }
         }
@@ -567,6 +611,27 @@ flat varying int tile2;
     const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
     const camera2 = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1000);
 
+    const field = new THREE.Group();
+    scene.add(field);
+
+    const battle = new THREE.Group();
+    scene.add(battle);
+
+    const enemyObjects = new THREE.Group();
+    battle.add(enemyObjects);
+
+    function SET_BATTLE(active) {
+        field.visible = !active;
+        battle.visible = active;
+    }
+
+    SET_BATTLE(false);
+
+    function ENTER_BATTLE() {
+        battle.position.copy(GET_POS());
+        SET_BATTLE(true);
+    }
+    
     const floorPlane = new THREE.Plane();
     floorPlane.setFromNormalAndCoplanarPoint(
         new THREE.Vector3(0, -1, 0),
@@ -582,10 +647,10 @@ flat varying int tile2;
     camera.lookAt(0, 0, 1);
 
     const roomObjects = new THREE.Object3D();
-    scene.add(roomObjects);
+    field.add(roomObjects);
 
     const charObjects = new THREE.Object3D();
-    scene.add(charObjects);
+    field.add(charObjects);
 
     function make_char(position, direction, tile) {
         const char = make_blank_char(position, direction, tile);
@@ -608,6 +673,19 @@ flat varying int tile2;
         object.position.addScaledVector(DIRECTIONS[char.direction], .4);
 
         return object;
+    }
+
+    for (const dir of DIRECTIONS) {
+        const object = new THREE.Mesh(
+            generateCharGeometry(randomTileChars("chars")),
+            charsMaterial,
+        );
+        object.scale.set(.8, .8, .8);
+        enemyObjects.add(object);
+        
+        object.lookAt(dir);
+        object.position.copy(GET_POS());
+        object.position.addScaledVector(dir, .7);
     }
 
     const sceneData = generate_scene();
@@ -659,7 +737,7 @@ flat varying int tile2;
         for (const cell of cells.values()) {
             const d = distances.get(cell);
             const u = Math.min(d, dlimit) / (dlimit+1);
-            const v = Math.max((1-u)*(1-u), 0.01);
+            const v = 0.05;//Math.max((1-u)*(1-u), 0.01);
             const color = new THREE.Color(v, v, v);
             cellColors.set(coords(...cell.position), color);
         }
@@ -839,7 +917,7 @@ flat varying int tile2;
         if (char) {
             chars.delete(coords(char.position[0], char.position[1], char.direction));
         } else {
-            make_char(GET_POS(), DIRECTION, randomTile("chars"));
+            make_char(GET_POS(), DIRECTION, randomTileChars("chars"));
         }
 
         sceneData.chars = [...chars.values()];
@@ -851,7 +929,7 @@ flat varying int tile2;
         const char = GET_CHAR(GET_POS(), DIRECTION);
 
         if (char) {
-            char.faceTile = nextTile("chars", char.faceTile);
+            char.faceTile = nextTileChars("chars", char.faceTile);
         }
 
         regenerate();
@@ -1034,6 +1112,33 @@ flat varying int tile2;
     add_button(fastControls, "👁️", toggle_camera);
     add_button(fastControls, "🔙", () => SET_CONTROLS(prevControls));
 
+    function combat_test() {
+        const ui = make_grid_controls(2, 3);
+        add_button(ui, "TORMENT\naa->bc", () => {});
+        add_button(ui, "VACUATE", () => {});
+        add_button(ui, "ESCAPE", () => {});
+
+        SET_CONTROLS(ui);
+    }
+
+    function combat_test_2() {
+        const ui = make_grid_controls(3, 3);
+        const [, mahead,] = add_basic_movement(ui);
+        mahead.textContent = "⚔️";
+
+        const button = document.createElement("button");
+        button.textContent = "🩸🩸🩸💧💧💧💧💧💧";
+        // button.addEventListener("click", callback);
+        button.classList.add("ui-border");
+        ui.append(button);
+        button.style.gridColumn = "1 / 4";
+        button.style.gridRow = "2 / 4";
+        button.style.background = "transparent";
+
+        ENTER_BATTLE();
+        SET_CONTROLS(ui);
+    }
+
     add_quick_button(editControls);
     add_button(editControls, "🧭🔙", switch_to_move);
     add_button(editControls, "➡️⛏️", switch_to_carve);
@@ -1041,6 +1146,7 @@ flat varying int tile2;
     add_button(editControls, "➡️🧱", switch_to_wall);
     add_button(editControls, "➡️👻", switch_to_char);
     add_button(editControls, "➡️🗄️", switch_to_file);
+    add_button(editControls, "➡️⚔️", combat_test_2);
 
     function add_basic_movement(controls) {
         const tleft  = add_button(controls, "↪️");
@@ -1230,6 +1336,21 @@ flat varying int tile2;
 
         CURRENT_MOVE.u += dt * 3;
         CURRENT_MOVE.u = Math.min(1, CURRENT_MOVE.u);
+
+        for (const char of charObjects.children) {
+            char.position.y = Math.sin(performance.now() * 0.005) * 0.01;
+            char.scale.set(1, 1, 1).multiplyScalar(1 + Math.sin(performance.now() * 0.0025) * 0.01)
+        }
+
+
+        const forward = camera.getWorldDirection(new THREE.Vector3());
+
+        for (const char of enemyObjects.children) {
+            char.position.y = Math.sin(performance.now() * 0.0025 + char.id * 7) * 0.05;
+            char.scale.set(1, 1, 1).multiplyScalar(1 + Math.sin(performance.now() * 0.005 + char.id * 13) * 0.035)
+            char.rotation.z =  Math.sin(performance.now() * 0.001 + char.id * 13) * Math.PI * .01;
+            // char.lookAt(new THREE.Vector3().add(char.position).add(forward));
+        }
 
         UPDATE_CAMERA();
 
@@ -1520,7 +1641,6 @@ class TextureArrayManager {
         this.data = new Uint8Array(stride * limit);
 
         this.array = new THREE.DataArrayTexture(this.data, width, height, limit);
-        this.array.image.data = this.data;
         this.array.colorSpace = THREE.SRGBColorSpace;
         this.array.format = THREE.RGBAFormat;
         this.array.type = THREE.UnsignedByteType;
