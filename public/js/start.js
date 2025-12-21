@@ -690,7 +690,7 @@ flat varying int tile2;
         for (const [coord, cell] of cells) {
             const [x, z] = cell.position;
 
-            const geometry = generateCellGeometry(cell, cellColors.get(coord));
+            const geometry = generateCellGeometry(cell, cellColors.get(coord) ?? new THREE.Color(1, 1, 1));
             const object = new THREE.Mesh(geometry, tilesMaterial);
             object.position.set(x, 0, z);
             roomObjects.add(object);
@@ -799,7 +799,9 @@ flat varying int tile2;
     }
 
     function cycle_room() {
-        const cell = GET_CELL(GET_POS());
+        const cell = FORCE_CELL(GET_POS());
+
+        console.log("CYCLE ROOM", cell)
 
         const current = cell.faceTiles[4];
         savedRoom = nextRoom(current);
@@ -819,7 +821,7 @@ flat varying int tile2;
     }
 
     function cycle_wall() {
-        const cell = GET_CELL(GET_POS());
+        const cell = FORCE_CELL(GET_POS());
 
         cell.faceTiles[DIRECTION] = nextTile("walls", cell.faceTiles[DIRECTION]);
         savedWall = cell.faceTiles[DIRECTION];
@@ -868,12 +870,12 @@ flat varying int tile2;
     function force_cell(cells, position) {
         const { x, z } = position;
         const co = coords(x, z);
-        
+
         if (cells.has(co))
             return cells.get(co);
 
         const cell = make_blank_cell([x, z], savedRoom);
-        
+
         cells.set(co, cell);
 
         return cell;
@@ -884,7 +886,9 @@ flat varying int tile2;
      * @returns {SMTCellData}
      */
     function FORCE_CELL(position) {
-        return force_cell(cells, position);
+        const cell = force_cell(cells, position); 
+        sceneData.cells.push(cell);
+        return cell;
     }
 
     function CARVE_PATH(position, direction) {
@@ -916,6 +920,9 @@ flat varying int tile2;
         const cell = cells.get(coords(x, z));
 
         if (cell) {
+            const index = sceneData.cells.indexOf(cell);
+            sceneData.cells.splice(index, 1);
+
             cells.delete(coords(x, z));
             for (let d = 0; d < 4; ++d) {
                 const nex = position.clone().add(DIRECTIONS[d]);
@@ -923,7 +930,7 @@ flat varying int tile2;
                 if (nei) nei.faceWalls[OPPOSITE(d)] = 1;
             }
         } else {
-            const cell = force_cell(cells, x, z);
+            const cell = force_cell(cells, new THREE.Vector3(x, z));
             set_room(cell, savedRoom);
             for (let d = 0; d < 4; ++d) {
                 const nex = position.clone().add(DIRECTIONS[d]);
@@ -933,7 +940,6 @@ flat varying int tile2;
                     nei.faceWalls[OPPOSITE(d)] = 0;
                 }
             }
-            regenerate_cells();
         }
 
         regenerate();
