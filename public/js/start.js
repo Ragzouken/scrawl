@@ -661,6 +661,11 @@ flat varying int tile2;
             const u = Math.min(d, dlimit) / (dlimit+1);
             const v = Math.max((1-u)*(1-u), 0.01);
             const color = new THREE.Color(v, v, v);
+            
+            //const h = (d / dlimit) % 1;
+            const h = ((cell.position[0] + cell.position[1]) / 8) % 1;
+
+            color.setHSL(h, 1.0, v * .5);
             cellColors.set(coords(...cell.position), color);
         }
     }
@@ -1445,12 +1450,11 @@ function generateCellGeometry(cell, color) {
     const normals = [];
     const indexes = [];
 
-    const quat = new THREE.Quaternion();
-
     for (let i = 0; i < 4; ++i) {
         addFace(ROTATIONS[i], color, cell.faceTiles[i] * cell.faceWalls[i]);
     }
 
+    const quat = new THREE.Quaternion();
     quat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI *  .5);
     addFace(quat, color, cell.faceTiles[4] * cell.faceWalls[4]);
     quat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI * -.5);

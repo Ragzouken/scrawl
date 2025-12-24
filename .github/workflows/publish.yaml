@@ -20,14 +20,14 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./public
-      - name: deploy to itch
-        uses: yeslayla/butler-publish-itchio-action@v1.0.3
-        env:
-          BUTLER_CREDENTIALS: ${{ secrets.BUTLER_CREDENTIALS }}
-          CHANNEL: web
-          ITCH_GAME: scrawl
-          ITCH_USER: candle
-          PACKAGE: ./public
+      # - name: deploy to itch
+      #   uses: yeslayla/butler-publish-itchio-action@v1.0.3
+      #   env:
+      #     BUTLER_CREDENTIALS: ${{ secrets.BUTLER_CREDENTIALS }}
+      #     CHANNEL: web
+      #     ITCH_GAME: scrawl
+      #     ITCH_USER: candle
+      #     PACKAGE: ./public
 
   deploy:
     environment:
