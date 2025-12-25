@@ -600,7 +600,8 @@ flat varying int tile2;
             generateCharGeometry(char.faceTile),
             charsMaterial,
         );
-        object.scale.set(.8, .8, .8);
+        object.scale.multiplyScalar(.75);
+        // object.scale.set(.8, .8, .8);
         charObjects.add(object);
 
         object.lookAt(DIRECTIONS[char.direction]);
@@ -1530,7 +1531,6 @@ class TextureArrayManager {
         this.data = new Uint8Array(stride * limit);
 
         this.array = new THREE.DataArrayTexture(this.data, width, height, limit);
-        this.array.image.data = this.data;
         this.array.colorSpace = THREE.SRGBColorSpace;
         this.array.format = THREE.RGBAFormat;
         this.array.type = THREE.UnsignedByteType;
