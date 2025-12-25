@@ -307,7 +307,7 @@ export default async function start() {
     }
     resize2();
 
-    const texArrayManager = new TextureArrayManager(24, 24, 1024);
+    const texArrayManager = new TextureArrayManager(64, 64, 1024);
 
     const loader = new THREE.TextureLoader();
     const wallsTex = await loader.loadAsync("assets/walls.webp");
@@ -663,8 +663,9 @@ flat varying int tile2;
             const v = Math.max((1-u)*(1-u), 0.01);
             const color = new THREE.Color(v, v, v);
             
-            //const h = (d / dlimit) % 1;
-            const h = ((cell.position[0] + cell.position[1]) / 8) % 1;
+            // const h = (d / dlimit) % 1;
+            // const h = ((cell.position[0] + cell.position[1]) / 8) % 1;
+            const h = Math.random();
 
             color.setHSL(h, 1.0, v * .5);
             cellColors.set(coords(...cell.position), color);
