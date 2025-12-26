@@ -606,7 +606,7 @@ flat varying int tile2;
 
         object.lookAt(DIRECTIONS[char.direction]);
         object.position.set(char.position[0], 0, char.position[1]);
-        object.position.addScaledVector(DIRECTIONS[char.direction], .4);
+        object.position.addScaledVector(DIRECTIONS[char.direction], .35);
 
         return object;
     }
@@ -667,7 +667,7 @@ flat varying int tile2;
             // const h = ((cell.position[0] + cell.position[1]) / 8) % 1;
             const h = Math.random();
 
-            color.setHSL(h, 1.0, v * .5);
+            color.setHSL(h, .85, v * .4 + .1);
             cellColors.set(coords(...cell.position), color);
         }
     }
@@ -1414,6 +1414,8 @@ function generateCharGeometry(tile) {
     const yrange = [0, 1];
 
     const color = new THREE.Color();
+
+    color.setHSL(Math.random(), .75, .5);
 
     for (let y = 0; y < 2; ++y) {
         for (let x = 0; x < 2; ++x) {
