@@ -501,8 +501,8 @@ flat varying int tile2;
     let NEXT_DIALOGUE_INDEX = 0;
     const DIALOGUES = [
         `Welcome to the Cathedral of Shadows! Gather demons and come again!`,
-        `Back in the beginning, it was being built to turn the dream of the Thousand Year Kingdom into a reality.`,
-        `Hello noob.`,
+        `Back in the beginning, it was being built to turn the dream of the Thousand Year Kingdom into a reality. Back in the beginning, it was being built to turn the dream of the Thousand Year Kingdom into a reality. Back in the beginning, it was being built to turn the dream of the Thousand Year Kingdom into a reality.`,
+        // `Hello noob.`,
     ];
 
     dialogueElement.addEventListener("pointerdown", () => NEXT_DIALOGUE());
@@ -538,7 +538,7 @@ flat varying int tile2;
     function SHOW_DIALOGUE(text) {
         dialogueElement.hidden = false;
         dialogueContentElement.textContent = text;
-        dialogueBlockerElement.hidden = false;
+        // dialogueBlockerElement.hidden = false;
     }
 
     function HIDE_DIALOGUE() {
@@ -655,6 +655,8 @@ flat varying int tile2;
             do_distances(new THREE.Vector3(x, 0, z), 0);
         }
 
+        const h = Math.random();
+
         cellColors.clear();
         const dlimit = 7;
         for (const cell of cells.values()) {
@@ -664,10 +666,10 @@ flat varying int tile2;
             const color = new THREE.Color(v, v, v);
             
             // const h = (d / dlimit) % 1;
-            // const h = ((cell.position[0] + cell.position[1]) / 8) % 1;
-            const h = Math.random();
+            const h = ((cell.position[0]^7 + cell.position[1]^3) / 8) % 1;
+            // const h = Math.random();
 
-            color.setHSL(h, .85, v * .4 + .1);
+            color.setHSL(h, .85, v * .5);
             cellColors.set(coords(...cell.position), color);
         }
     }
@@ -952,7 +954,7 @@ flat varying int tile2;
         regenerate();
     }
 
-    function make_grid_controls(cols, rows) {
+    function make_grid_controls(cols=3, rows=3) {
         const controls = html("fieldset", { class: "editor" });
         Object.assign(controls.style, {
             "grid-template-columns": `repeat(${cols}, 1fr)`,
@@ -960,6 +962,11 @@ flat varying int tile2;
         });
         return controls;
     }
+
+    const choice_test = make_grid_controls(2, 4);
+    choice_test.style.setProperty("font-size", "1.5rem", "important");
+    add_button(choice_test, "yes");
+    add_button(choice_test, "no");
 
     const moveControls = make_grid_controls();
     const editControls = make_grid_controls();
@@ -974,6 +981,7 @@ flat varying int tile2;
     let prevControls;
 
     SET_CONTROLS(moveControls);
+    // SET_CONTROLS(choice_test);
 
     function SET_CONTROLS(controls) {
         prevControls = activeControls;
